@@ -45,7 +45,7 @@ public class ItemGroupMixInTest {
 
     @Rule public JenkinsRule r = new JenkinsRule();
 
-    @Bug(20951)
+    @Issue("JENKINS-20951")
     @LocalData
     @Test public void xmlFileReadCannotResolveClassException() throws Exception {
         MockFolder d = r.jenkins.getItemByFullName("d", MockFolder.class);
