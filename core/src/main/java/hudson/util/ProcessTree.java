@@ -23,9 +23,11 @@
  */
 package hudson.util;
 
-import com.sun.jna.Memory;
-import com.sun.jna.Native;
-import com.sun.jna.ptr.IntByReference;
+import static com.sun.jna.Pointer.NULL;
+import static hudson.util.jna.GNUCLibrary.LIBC;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.FINER;
+import static java.util.logging.Level.FINEST;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Util;
@@ -35,11 +37,17 @@ import hudson.slaves.SlaveComputer;
 import hudson.util.ProcessTree.OSProcess;
 import hudson.util.ProcessTreeRemoting.IOSProcess;
 import hudson.util.ProcessTreeRemoting.IProcessTree;
-import jenkins.security.SlaveToMasterCallable;
-import org.jvnet.winp.WinProcess;
-import org.jvnet.winp.WinpException;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileFilter;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.RandomAccessFile;
+import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -56,11 +64,16 @@ import java.util.SortedMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.sun.jna.Pointer.NULL;
-import static hudson.util.jna.GNUCLibrary.LIBC;
-import static java.util.logging.Level.FINE;
-import static java.util.logging.Level.FINER;
-import static java.util.logging.Level.FINEST;
+import jenkins.security.SlaveToMasterCallable;
+
+import org.apache.commons.io.FilenameUtils;
+import org.jvnet.winp.WinProcess;
+import org.jvnet.winp.WinpException;
+
+import com.google.common.base.Strings;
+import com.sun.jna.Memory;
+import com.sun.jna.Native;
+import com.sun.jna.ptr.IntByReference;
 
 /**
  * Represents a snapshot of the process tree of the current system.
@@ -87,7 +100,7 @@ public abstract class ProcessTree implements Iterable<OSProcess>, IProcessTree, 
      * Lazily obtained {@link ProcessKiller}s to be applied on this process tree.
      */
     private transient volatile List<ProcessKiller> killers;
-
+    
     // instantiation only allowed for subtypes in this class
     private ProcessTree() {}
 
@@ -124,7 +137,12 @@ public abstract class ProcessTree implements Iterable<OSProcess>, IProcessTree, 
      * them all. This is suitable for locating daemon processes
      * that cannot be tracked by the regular ancestor/descendant relationship.
      */
-    public abstract void killAll(Map<String, String> modelEnvVars) throws InterruptedException;
+    public final void killAll(Map<String, String> modelEnvVars) throws InterruptedException {
+        List<String> empty = Collections.emptyList();
+        killAll(modelEnvVars, empty);
+    }
+
+    public abstract void killAll(Map<String, String> modelEnvVars, List<String> whitelist) throws InterruptedException;
 
     /**
      * Convenience method that does {@link #killAll(Map)} and {@link OSProcess#killRecursively()}.
@@ -164,6 +182,25 @@ public abstract class ProcessTree implements Iterable<OSProcess>, IProcessTree, 
                 killers = Collections.emptyList();
             }
         return killers;
+    }
+
+    /**
+     * @param p The process to check
+     * @param whitelist A list of processes
+     * @return true if the process' command is in the whitelist. False else.
+     */
+    protected boolean isWhiteListed(OSProcess p, List<String> whitelist) {
+        try {
+            // ignore path to the binary, use only the executable's basename to make the whitelist portable (ignore .exe under windows)
+            String command = FilenameUtils.getBaseName(p.getArguments().get(0));
+            if (!Strings.isNullOrEmpty(command)) {
+                return whitelist.contains(command);
+            }
+        } catch (WinpException e) {
+            // If we cannot read a process' details, assume it is not
+            // whitelisted
+        }
+        return false;
     }
 
     /**
@@ -377,7 +414,7 @@ public abstract class ProcessTree implements Iterable<OSProcess>, IProcessTree, 
             };
         }
 
-        public void killAll(Map<String, String> modelEnvVars) {
+        public void killAll(Map<String, String> modelEnvVars, List<String> whitelist) {
             // no-op
         }
     };
@@ -440,7 +477,7 @@ public abstract class ProcessTree implements Iterable<OSProcess>, IProcessTree, 
             return get(new WinProcess(proc).getPid());
         }
 
-        public void killAll(Map<String, String> modelEnvVars) throws InterruptedException {
+        public void killAll(Map<String, String> modelEnvVars, List<String> whitelist) throws InterruptedException {
             for( OSProcess p : this) {
                 if(p.getPid()<10)
                     continue;   // ignore system processes like "idle process"
@@ -455,16 +492,18 @@ public abstract class ProcessTree implements Iterable<OSProcess>, IProcessTree, 
                     LOGGER.log(FINEST,"  Failed to check environment variable match",e);
                     continue;
                 }
-
-                if(matched)
+                boolean whitelisted = isWhiteListed(p,whitelist);
+                if (matched && !whitelisted)
                     p.killRecursively();
+                else if (whitelisted)
+                    LOGGER.finest("Excluded from killing by whitelist");
                 else
                     LOGGER.finest("Environment variable didn't match");
 
             }
         }
 
-        static {
+		static {
             WinProcess.enableDebugPrivilege();
         }
     }
@@ -481,9 +520,9 @@ public abstract class ProcessTree implements Iterable<OSProcess>, IProcessTree, 
             }
         }
 
-        public void killAll(Map<String, String> modelEnvVars) throws InterruptedException {
+        public void killAll(Map<String, String> modelEnvVars, List<String> whitelist) throws InterruptedException {
             for (OSProcess p : this)
-                if(p.hasMatchingEnvVars(modelEnvVars))
+                if(p.hasMatchingEnvVars(modelEnvVars) && !isWhiteListed(p, whitelist))
                     p.killRecursively();
         }
     }
@@ -1153,8 +1192,8 @@ public abstract class ProcessTree implements Iterable<OSProcess>, IProcessTree, 
         }
 
         @Override
-        public void killAll(Map<String, String> modelEnvVars) throws InterruptedException {
-            proxy.killAll(modelEnvVars);
+        public void killAll(Map<String, String> modelEnvVars, List<String> whitelist) throws InterruptedException {
+            proxy.killAll(modelEnvVars, whitelist);
         }
 
         Object writeReplace() {

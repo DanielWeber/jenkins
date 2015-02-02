@@ -175,6 +175,7 @@ import hudson.util.HudsonIsRestarting;
 import hudson.util.IOUtils;
 import hudson.util.Iterators;
 import hudson.util.JenkinsReloadFailed;
+import hudson.util.LogTaskListener;
 import hudson.util.Memoizer;
 import hudson.util.MultipartFormDataParser;
 import hudson.util.NamingThreadFactory;
@@ -189,14 +190,66 @@ import hudson.views.DefaultViewsTabBar;
 import hudson.views.MyViewsTabBar;
 import hudson.views.ViewsTabBar;
 import hudson.widgets.Widget;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.net.BindException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
+
+import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.crypto.SecretKey;
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletResponse;
+
 import jenkins.ExtensionComponentSet;
 import jenkins.ExtensionRefreshException;
 import jenkins.InitReactorRunner;
 import jenkins.model.ProjectNamingStrategy.DefaultProjectNamingStrategy;
 import jenkins.security.ConfidentialKey;
 import jenkins.security.ConfidentialStore;
-import jenkins.security.SecurityListener;
 import jenkins.security.MasterToSlaveCallable;
+import jenkins.security.SecurityListener;
 import jenkins.slaves.WorkspaceLocator;
 import jenkins.util.Timer;
 import jenkins.util.io.FileBoolean;
@@ -292,12 +345,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import antlr.ANTLRException;
 
-import static hudson.Util.*;
-import static hudson.init.InitMilestone.*;
-import hudson.util.LogTaskListener;
-import static java.util.logging.Level.*;
-import static javax.servlet.http.HttpServletResponse.*;
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.inject.Injector;
+import com.thoughtworks.xstream.XStream;
 
 /**
  * Root object of the system.
@@ -4257,4 +4311,26 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
         }
     }
 
+    public String getProcessCleanupWhitelist() {
+        return processCleanupWhitelist;
+    }
+
+    public void setProcessCleanupWhitelist(String processCleanupWhitelist) throws IOException {
+        this.processCleanupWhitelist = processCleanupWhitelist;
+        save();
+    }
+
+    /**
+     * @return A list of process whitelist entries. May be empty but never null 
+     */
+    public List<String> getProcessCleanupWhitelistList() {
+        if (Strings.isNullOrEmpty(processCleanupWhitelist))
+            return Collections.emptyList();
+        
+        List<String> whitelist = Lists.newArrayList();
+        for (String entry : processCleanupWhitelist.split(",")) {
+            whitelist.add(entry.trim());
+        }
+        return whitelist;
+    }
 }
