@@ -1,2 +1,9 @@
 language: java
 script: mvn package -DskipTests=true
+deploy:
+  provider: bintray
+  file: bintrayconfig.json
+  user: danielweber
+  key:
+    secure: KFWfnpD42m5K+VtAjtewPXu/uuowD7HpqvX0gWiw0vuNGoAVadT/wi+HvJ6G/DbLg2g3b5nueraewfSVCGFfVtqcQyUkzCr751/9NykGrUEm5KMZJ1VvhF6vR7uAdz7xKt6K75YvsHIrXKpUopX9Y1ecpS8zBAFLgYLDZ7JTb7LHSTjEXfvMQMzqgItjGEBZBSmavtZLmnDUE5hAbh/pbQMjqG+G+/3X3Hku00WhZVw4yzjeNIjtAOTdTVjC9VuwMLxu0IcfrRwIU1ypH/qPbPi98Xrhlg01KBpkGK8t9OKo8PbLUzfH10rhmuX/v1lqn2dgNRxL8kDrbS/FWO4sfjJK657+Xjy6Dhqxnp5RmPz2n92WH4zpw06LTct8j91Tu1/F0r7j7r+buV0nS/3qXn0Iz64gQhSWecuJZB0l5QV1mIQttzcnFfXGbLlDjTORUW1Gi+dzzsgyFWlN6AXxKU4ssENCFGf2fI9dd4bOSz/vrI5KfuXOFOmN6f1VLpeyltk6zPrbTH61rBz9h+7l0E2MGFV9BhmGtUe3sW3trhdJ6Ikw7k5/08krSXwPdE1onLHXY9nF8jtcwwrjGe3taoiAy0NfaD49dX//PnTKQts4DgzYUaGgosYGgwnbpd9ahROWv6jHTs1fZIHW3e2SCk31Ccx70sqV1JSSI+8FvGQ=
+  on: continental

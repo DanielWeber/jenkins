@@ -1,0 +1,34 @@
+{
+    "package": {
+        "subject": "danielweber",
+        "repo": "generic",
+        "name": "jenkins",
+        "desc": "Jenkins LTS version(s) with some patches",
+        "website_url": "https://github.com/DanielWeber/jenkins/",
+        "issue_tracker_url": "https://github.com/DanielWeber/jenkins/",
+        "vcs_url": "https://github.com/DanielWeber/jenkins/",
+        "github_use_tag_release_notes": false,
+        "github_release_notes_file": "RELEASE.txt",
+        "licenses": ["MIT"],
+        "labels": [],
+        "public_download_numbers": false,
+        "public_stats": false,
+        "attributes": []
+    },
+
+    "version": {
+        "name": "2.7.1",
+        "desc": "Jenkins LTS 2.7.1 + Performance patch",
+        "released": "2016-07-28",
+        "vcs_tag": "jenkins-2.7.1-continental",
+        "attributes": [],
+        "gpgSign": false
+    },
+
+    "files":
+        [
+        {"includePattern": "war/target/jenkins.war", "uploadPattern": "war/jenkins.war"}
+        ],
+        
+    "publish": true
+}
