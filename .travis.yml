@@ -1,5 +1,6 @@
 language: java
-script: mvn package -DskipTests=true
+install: mvn install -DskipTests=true -Dlicense.disableCheck -Dmaven.javadoc.skip=true -B -V
+script: mvn package -DskipTests=true -Dlicense.disableCheck
 deploy:
   provider: bintray
   file: bintrayconfig.json
