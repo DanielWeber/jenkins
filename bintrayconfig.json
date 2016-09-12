@@ -17,17 +17,17 @@
     },
 
     "version": {
-        "name": "2.7.3",
-        "desc": "Jenkins LTS 2.7.3 + Performance patch(es)",
+        "name": "2.7.4",
+        "desc": "Jenkins LTS 2.7.4 + Performance patch(es)",
         "released": "2016-09-02",
-        "vcs_tag": "jenkins-2.7.3-continental",
+        "vcs_tag": "jenkins-2.7.4-continental",
         "attributes": [],
         "gpgSign": false
     },
 
     "files":
         [
-        {"includePattern": "war/target/jenkins.war", "uploadPattern": "2.7.3/war/jenkins.war", "matrixParams": { "override": 1 } }
+        {"includePattern": "war/target/jenkins.war", "uploadPattern": "2.7.4/war/jenkins.war", "matrixParams": { "override": 1 } }
         ],
         
     "publish": true
