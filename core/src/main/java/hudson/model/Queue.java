@@ -121,6 +121,7 @@ import org.kohsuke.accmod.restrictions.DoNotUse;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.converters.basic.AbstractSingleValueConverter;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jenkins.util.SystemProperties;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnegative;
@@ -1098,25 +1099,7 @@ public class Queue extends ResourceController implements Saveable {
      * Returns true if this queue contains the said project.
      */
     public boolean contains(Task t) {
-        final Snapshot snapshot = this.snapshot;
-        for (Item item : snapshot.blockedProjects) {
-            if (item.task.equals(t))
-                return true;
-        }
-        for (Item item : snapshot.buildables) {
-            if (item.task.equals(t))
-                return true;
-        }
-        for (Item item : snapshot.pendings) {
-            if (item.task.equals(t))
-                return true;
-        }
-        for (Item item : snapshot.waitingList) {
-            if (item.task.equals(t)) {
-                return true;
-            }
-        }
-        return false;
+        return getItem(t)!=null;
     }
 
     /**
@@ -1429,7 +1412,7 @@ public class Queue extends ResourceController implements Saveable {
                 }
                 // pending -> buildable
                 for (BuildableItem p: lostPendings) {
-                    LOGGER.log(Level.INFO,
+                    LOGGER.log(Level.FINE,
                             "BuildableItem {0}: pending -> buildable as the assigned executor disappeared",
                             p.task.getFullDisplayName());
                     p.isPending = false;
@@ -2787,11 +2770,13 @@ public class Queue extends ResourceController implements Saveable {
             return x;
         }
 
+        @SuppressFBWarnings(value = "IA_AMBIGUOUS_INVOCATION_OF_INHERITED_OR_OUTER_METHOD",
+                justification = "It will invoke the inherited clear() method according to Java semantics. "
+                              + "FindBugs recommends suppresing warnings in such case")
         public void cancelAll() {
             for (T t : new ArrayList<T>(this))
                 t.cancel(Queue.this);
-
-            clear();    // just to be sure
+            clear();
         }
     }
 

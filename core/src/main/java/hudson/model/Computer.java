@@ -67,8 +67,9 @@ import hudson.util.NamingThreadFactory;
 import jenkins.model.Jenkins;
 import jenkins.util.ContextResettingExecutorService;
 import jenkins.security.MasterToSlaveCallable;
-import jenkins.security.NotReallyRoleSensitiveCallable;
 
+import org.jenkins.ui.icon.Icon;
+import org.jenkins.ui.icon.IconSet;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.DoNotUse;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -522,10 +523,13 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
     }
 
     /**
-     * CLI command to mark the node offline.
+     * @deprecated  Implementation of CLI command "offline-node" moved to {@link hudson.cli.OfflineNodeCommand}.
+     *
+     * @param cause
+     *      Record the note about why you are disconnecting this node
      */
-    @CLIMethod(name="offline-node")
-    public void cliOffline(@Option(name="-m",usage="Record the note about why you are disconnecting this node") String cause) throws ExecutionException, InterruptedException {
+    @Deprecated
+    public void cliOffline(String cause) throws ExecutionException, InterruptedException {
         checkPermission(DISCONNECT);
         setTemporarilyOffline(true, new ByCLI(cause));
     }
@@ -719,6 +723,13 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
         }
     }
 
+    /**
+     * Returns the icon for this computer.
+     * 	 
+     * It is both the recommended and default implementation to serve different icons based on {@link #isOffline}
+     * 
+     * @see #getIconClassName()
+     */
     @Exported
     public String getIcon() {
         if(isOffline())
@@ -727,6 +738,17 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
             return "computer.png";
     }
 
+    /**
+     * Returns the class name that will be used to lookup the icon.
+     * 
+     * This class name will be added as a class tag to the html img tags where the icon should
+     * show up followed by a size specifier given by {@link Icon#toNormalizedIconSizeClass(String)}
+     * The conversion of class tag to src tag is registered through {@link IconSet#addIcon(Icon)}
+     * 
+     * It is both the recommended and default implementation to serve different icons based on {@link #isOffline}
+     * 
+     * @see #getIcon()
+     */
     @Exported
     public String getIconClassName() {
         if(isOffline())
@@ -1015,7 +1037,7 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
     /**
      * Called by {@link Executor} to kill excessive executors from this computer.
      */
-    /*package*/ void removeExecutor(final Executor e) {
+    protected void removeExecutor(final Executor e) {
         final Runnable task = new Runnable() {
             @Override
             public void run() {
@@ -1039,9 +1061,6 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
 
     /**
      * Returns true if any of the executors are {@linkplain Executor#isActive active}.
-     *
-     * Note that if an executor dies, we'll leave it in {@link #executors} until
-     * the administrator yanks it out, so that we can see why it died.
      *
      * @since 1.509
      */
@@ -1411,7 +1430,7 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
         }
 
         Node result = node.reconfigure(req, req.getSubmittedForm());
-        replaceBy(result);
+        Jenkins.getInstance().getNodesObject().replaceNode(this.getNode(), result);
 
         // take the user back to the agent top page.
         rsp.sendRedirect2("../" + result.getNodeName() + '/');
@@ -1446,28 +1465,6 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
     }
 
     /**
-     * Replaces the current {@link Node} by another one.
-     */
-    private void replaceBy(final Node newNode) throws ServletException, IOException {
-        final Jenkins app = Jenkins.getInstance();
-
-        // use the queue lock until Nodes has a way of directly modifying a single node.
-        Queue.withLock(new NotReallyRoleSensitiveCallable<Void, IOException>() {
-            public Void call() throws IOException {
-                List<Node> nodes = new ArrayList<Node>(app.getNodes());
-                Node node = getNode();
-                int i  = (node != null) ? nodes.indexOf(node) : -1;
-                if(i<0) {
-                    throw new IOException("This agent appears to be removed while you were editing the configuration");
-                }
-                nodes.set(i, newNode);
-                app.setNodes(nodes);
-                return null;
-            }
-        });
-    }
-
-    /**
      * Updates Job by its XML definition.
      *
      * @since 1.526
@@ -1475,7 +1472,7 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
     public void updateByXml(final InputStream source) throws IOException, ServletException {
         checkPermission(CONFIGURE);
         Node result = (Node)Jenkins.XSTREAM2.fromXML(source);
-        replaceBy(result);
+        Jenkins.getInstance().getNodesObject().replaceNode(this.getNode(), result);
     }
 
     /**
@@ -1497,7 +1494,6 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
     /**
      * Blocks until the node becomes online/offline.
      */
-    @CLIMethod(name="wait-node-online")
     public void waitUntilOnline() throws InterruptedException {
         synchronized (statusChangeLock) {
             while (!isOnline())
@@ -1505,7 +1501,6 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
         }
     }
 
-    @CLIMethod(name="wait-node-offline")
     public void waitUntilOffline() throws InterruptedException {
         synchronized (statusChangeLock) {
             while (!isOffline())
@@ -1554,11 +1549,11 @@ public /*transient*/ abstract class Computer extends Actionable implements Acces
         Jenkins h = Jenkins.getInstance();
         Computer item = h.getComputer(name);
         if (item==null) {
-            List<String> names = new ArrayList<String>();
-            for (Computer c : h.getComputers())
-                if (c.getName().length()>0)
-                    names.add(c.getName());
-            throw new CmdLineException(null,Messages.Computer_NoSuchSlaveExists(name,EditDistance.findNearest(name,names)));
+            List<String> names = ComputerSet.getComputerNames();
+            String adv = EditDistance.findNearest(name, names);
+            throw new IllegalArgumentException(adv == null ?
+                    hudson.model.Messages.Computer_NoSuchSlaveExistsWithoutAdvice(name) :
+                    hudson.model.Messages.Computer_NoSuchSlaveExists(name, adv));
         }
         return item;
     }

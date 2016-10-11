@@ -24,6 +24,8 @@
 package hudson;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import hudson.security.ACLContext;
 import jenkins.util.SystemProperties;
 import hudson.PluginWrapper.Dependency;
 import hudson.init.InitMilestone;
@@ -468,7 +470,7 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
                                             if(p.isActive())
                                                 activePlugins.add(p);
                                         }
-                                    } catch (CycleDetectedException e) {
+                                    } catch (CycleDetectedException e) { // TODO this should be impossible, since we override reactOnCycle to not throw the exception
                                         stop(); // disable all plugins since classloading from them can lead to StackOverflow
                                         throw e;    // let Hudson fail
                                     }
@@ -508,7 +510,7 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
 
                     // schedule execution of loading plugins
                     for (final PluginWrapper p : activePlugins.toArray(new PluginWrapper[activePlugins.size()])) {
-                        g.followedBy().notFatal().attains(PLUGINS_PREPARED).add("Loading plugin " + p.getShortName(), new Executable() {
+                        g.followedBy().notFatal().attains(PLUGINS_PREPARED).add(String.format("Loading plugin %s v%s (%s)", p.getLongName(), p.getVersion(), p.getShortName()), new Executable() {
                             public void run(Reactor session) throws Exception {
                                 try {
                                     p.resolvePluginDependencies();
@@ -574,6 +576,8 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
         return loadPluginsFromWar(fromPath, null);
     }
 
+    //TODO: Consider refactoring in order to avoid DMI_COLLECTION_OF_URLS
+    @SuppressFBWarnings(value = "DMI_COLLECTION_OF_URLS", justification = "Plugin loading happens only once on Jenkins startup")
     protected @Nonnull Set<String> loadPluginsFromWar(@Nonnull String fromPath, @CheckForNull FilenameFilter filter) {
         Set<String> names = new HashSet();
 
@@ -630,6 +634,8 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
         return names;
     }
 
+    //TODO: Consider refactoring in order to avoid DMI_COLLECTION_OF_URLS
+    @SuppressFBWarnings(value = "DMI_COLLECTION_OF_URLS", justification = "Plugin loading happens only once on Jenkins startup")
     protected static void addDependencies(URL hpiResUrl, String fromPath, Set<URL> dependencySet) throws URISyntaxException, MalformedURLException {
         if (dependencySet.contains(hpiResUrl)) {
             return;
@@ -847,7 +853,8 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
         // so existing plugins can't be depending on this newly deployed one.
 
         plugins.add(p);
-        activePlugins.add(p);
+        if (p.isActive())
+            activePlugins.add(p);
         synchronized (((UberClassLoader) uberClassLoader).loaded) {
             ((UberClassLoader) uberClassLoader).loaded.clear();
         }
@@ -1376,7 +1383,7 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
      *                    the plugin will only take effect after the reboot.
      *                    See {@link UpdateCenter#isRestartRequiredForCompletion()}
      * @return The install job list.
-     * @since FIXME
+     * @since 2.0
      */
     @Restricted(NoExternalUse.class)
     public List<Future<UpdateCenter.UpdateCenterJob>> install(@Nonnull Collection<String> plugins, boolean dynamicLoad) {
@@ -1459,12 +1466,9 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
                     }
                     updateCenter.persistInstallStatus();
                     if(!failures) {
-                        ACL.impersonate(currentAuth, new Runnable() {
-                            @Override
-                            public void run() {
-                                InstallUtil.proceedToNextStateFrom(InstallState.INITIAL_PLUGINS_INSTALLING);
-                            }
-                        });
+                        try (ACLContext _ = ACL.as(currentAuth)) {
+                            InstallUtil.proceedToNextStateFrom(InstallState.INITIAL_PLUGINS_INSTALLING);
+                        }
                     }
                 }
             }.start();
@@ -1948,14 +1952,14 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
 
         private transient volatile boolean isActive = false;
 
-        private transient volatile List<String> pluginsWithCycle;
+        private transient volatile List<PluginWrapper> pluginsWithCycle;
 
         public boolean isActivated() {
             if(pluginsWithCycle == null){
-                pluginsWithCycle = new ArrayList<String>();
+                pluginsWithCycle = new ArrayList<>();
                 for (PluginWrapper p : Jenkins.getInstance().getPluginManager().getPlugins()) {
                     if(p.hasCycleDependency()){
-                        pluginsWithCycle.add(p.getShortName());
+                        pluginsWithCycle.add(p);
                         isActive = true;
                     }
                 }
@@ -1963,7 +1967,7 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
             return isActive;
         }
 
-        public List<String> getPluginsWithCycle() {
+        public List<PluginWrapper> getPluginsWithCycle() {
             return pluginsWithCycle;
         }
     }
