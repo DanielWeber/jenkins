@@ -1,6 +1,9 @@
 language: java
 install: mvn install -DskipTests=true -Dlicense.disableCheck -Dmaven.javadoc.skip=true -B -V
 script: mvn package -DskipTests=true -Dlicense.disableCheck
+cache:
+  directories:
+    - $HOME/.m2
 deploy:
   provider: bintray
   file: bintrayconfig.json
