@@ -79,7 +79,7 @@ import org.kohsuke.stapler.export.ExportedBean;
  * through XStream.
  *
  *
- * <h2>Assocaited Views</h2>
+ * <h2>Associated Views</h2>
  * <h4>config.jelly</h4>
  * <p>
  * {@link ParameterDefinition} class uses <tt>config.jelly</tt> to contribute a form
@@ -194,8 +194,7 @@ public abstract class ParameterDefinition implements
      * Create a parameter value from the string given in the CLI.
      *
      * @param command
-     *      This is the command that got the parameter. You can use its {@link CLICommand#checkChannel()}
-     *      for interacting with the CLI JVM.
+     *      This is the command that got the parameter.
      * @throws AbortException
      *      If the CLI processing should be aborted. Hudson will report the error message
      *      without stack trace, and then exits this command. Useful for graceful termination.

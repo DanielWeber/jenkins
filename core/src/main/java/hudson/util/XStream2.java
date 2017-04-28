@@ -43,7 +43,7 @@ import com.thoughtworks.xstream.io.HierarchicalStreamDriver;
 import com.thoughtworks.xstream.io.HierarchicalStreamReader;
 import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
 import com.thoughtworks.xstream.mapper.CannotResolveClassException;
-import edu.umd.cs.findbugs.annotations.SuppressWarnings;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.PluginManager;
 import hudson.PluginWrapper;
 import hudson.diagnosis.OldDataMonitor;
@@ -144,6 +144,9 @@ public class XStream2 extends XStream {
     private void init() {
         // list up types that should be marshalled out like a value, without referential integrity tracking.
         addImmutableType(Result.class);
+
+        // http://www.openwall.com/lists/oss-security/2017/04/03/4
+        denyTypes(new Class[] { void.class, Void.class });
 
         registerConverter(new RobustCollectionConverter(getMapper(),getReflectionProvider()),10);
         registerConverter(new RobustMapConverter(getMapper()), 10);
@@ -415,7 +418,7 @@ public class XStream2 extends XStream {
 
         private PluginManager pm;
 
-        @SuppressWarnings("NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE") // classOwnership checked for null so why does FB complain?
+        @SuppressFBWarnings("NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE") // classOwnership checked for null so why does FB complain?
         @Override public String ownerOf(Class<?> clazz) {
             if (classOwnership != null) {
                 return classOwnership.ownerOf(clazz);

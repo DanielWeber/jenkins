@@ -47,6 +47,7 @@ import org.apache.tools.ant.taskdefs.Move;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.DefaultLogger;
 import org.apache.tools.ant.types.FileSet;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import javax.servlet.ServletException;
 import java.io.File;
@@ -106,6 +107,7 @@ public class WindowsInstallerLink extends ManagementLink {
     /**
      * Performs installation.
      */
+    @RequirePOST
     public void doDoInstall(StaplerRequest req, StaplerResponse rsp, @QueryParameter("dir") String _dir) throws IOException, ServletException {
         if(installationDir!=null) {
             // installation already complete
@@ -167,6 +169,7 @@ public class WindowsInstallerLink extends ManagementLink {
         }
     }
 
+    @RequirePOST
     public void doRestart(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
         if(installationDir==null) {
             // if the user reloads the page after Hudson has restarted,
@@ -306,9 +309,9 @@ public class WindowsInstallerLink extends ManagementLink {
         try {
             return Kernel32Utils.waitForExitProcess(sei.hProcess);
         } finally {
-            FileInputStream fin = new FileInputStream(new File(pwd,"redirect.log"));
-            IOUtils.copy(fin, out.getLogger());
-            fin.close();
+            try (FileInputStream fin = new FileInputStream(new File(pwd,"redirect.log"))) {
+                IOUtils.copy(fin, out.getLogger());
+            }
         }
     }
 

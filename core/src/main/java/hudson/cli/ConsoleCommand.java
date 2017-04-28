@@ -76,14 +76,12 @@ public class ConsoleCommand extends CLICommand {
                 do {
                     logText = run.getLogText();
                     pos = logText.writeLogTo(pos, w);
+                    // TODO should sleep as in Run.writeWholeLogTo
                 } while (!logText.isComplete());
             } else {
-                InputStream logInputStream = run.getLogInputStream();
-                try {
-                    IOUtils.skip(logInputStream,pos);
-                    org.apache.commons.io.IOUtils.copy(new InputStreamReader(logInputStream,run.getCharset()),w);
-                } finally {
-                    logInputStream.close();
+                try (InputStream logInputStream = run.getLogInputStream()) {
+                    IOUtils.skip(logInputStream, pos);
+                    IOUtils.copy(new InputStreamReader(logInputStream, run.getCharset()), w);
                 }
             }
         } finally {

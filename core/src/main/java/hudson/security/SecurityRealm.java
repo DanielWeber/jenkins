@@ -189,7 +189,9 @@ public abstract class SecurityRealm extends AbstractDescribableImpl<SecurityReal
      * @return
      *      never null. By default, this method returns a no-op authenticator that always authenticates
      *      the session as authenticated by the transport (which is often just {@link jenkins.model.Jenkins#ANONYMOUS}.)
+     * @deprecated See {@link CliAuthenticator}.
      */
+    @Deprecated
     public CliAuthenticator createCliAuthenticator(final CLICommand command) {
         return new CliAuthenticator() {
             public Authentication authenticate() {
@@ -494,7 +496,7 @@ public abstract class SecurityRealm extends AbstractDescribableImpl<SecurityReal
      * @return Encoded URI where we should go back after successful login
      *         or "/" if no way back or an issue occurred
      *
-     * @since TODO
+     * @since 2.4
      */
     @Restricted(DoNotUse.class)
     public static String getFrom() {
