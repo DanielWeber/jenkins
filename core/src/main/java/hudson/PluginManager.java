@@ -117,7 +117,6 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -953,6 +952,7 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
      * with a reasonable up-to-date check. A convenience method to be used by the {@link #loadBundledPlugins()}.
      */
     protected void copyBundledPlugin(URL src, String fileName) throws IOException {
+        LOGGER.log(FINE, "Copying {0}", src);
         fileName = fileName.replace(".hpi",".jpi"); // normalize fileNames to have the correct suffix
         String legacyName = fileName.replace(".jpi",".hpi");
         long lastModified = getModificationDate(src);
@@ -1954,7 +1954,7 @@ public abstract class PluginManager extends AbstractModelObject implements OnMas
      * Stores {@link Plugin} instances.
      */
     /*package*/ static final class PluginInstanceStore {
-        final Map<PluginWrapper,Plugin> store = new Hashtable<PluginWrapper,Plugin>();
+        final Map<PluginWrapper,Plugin> store = new ConcurrentHashMap<PluginWrapper,Plugin>();
     }
 
     /**

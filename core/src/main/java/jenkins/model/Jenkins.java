@@ -156,7 +156,6 @@ import hudson.util.FormValidation;
 import hudson.util.Futures;
 import hudson.util.HudsonIsLoading;
 import hudson.util.HudsonIsRestarting;
-import hudson.util.IOUtils;
 import hudson.util.Iterators;
 import hudson.util.JenkinsReloadFailed;
 import hudson.util.Memoizer;
@@ -289,6 +288,7 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static hudson.Util.*;
 import static hudson.init.InitMilestone.*;
@@ -945,6 +945,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
 
 
             if(KILL_AFTER_LOAD)
+                // TODO cleanUp?
                 System.exit(0);
 
             setupWizard = new SetupWizard();
@@ -1762,7 +1763,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
      * Gets all the {@link Item}s unordered, lazily and recursively in the {@link ItemGroup} tree
      * and filter them by the given type.
      *
-     * @since FIXME
+     * @since 2.37
      */
     public <T extends Item> Iterable<T> allItems(Class<T> type) {
         return Items.allItems(this, type);
@@ -1780,7 +1781,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
     /**
      * Gets all the items unordered, lazily and recursively.
      *
-     * @since FIXME
+     * @since 2.37
      */
     public Iterable<Item> allItems() {
         return allItems(Item.class);
@@ -1825,7 +1826,14 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
         return names;
     }
 
-    public View getView(String name) {
+    /**
+     * Gets a view by the specified name.
+     * The method iterates through {@link hudson.model.ViewGroup}s if required.
+     * @param name Name of the view
+     * @return View instance or {@code null} if it is missing
+     */
+    @CheckForNull
+    public View getView(@CheckForNull String name) {
         return viewGroupMixIn.getView(name);
     }
 
@@ -1884,7 +1892,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
         return viewGroupMixIn.getPrimaryView();
      }
 
-    public void setPrimaryView(View v) {
+    public void setPrimaryView(@Nonnull View v) {
         this.primaryView = v.getViewName();
     }
 
@@ -2164,6 +2172,14 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
             if(m.id.equals(id))
                 return m;
         return null;
+    }
+
+    /**
+     * Returns the enabled and activated administrative monitors.
+     */
+    @Restricted(NoExternalUse.class)
+    public List<AdministrativeMonitor> getActiveAdministrativeMonitors() {
+        return administrativeMonitors.stream().filter(m -> m.isEnabled() && m.isActivated()).collect(Collectors.toList());
     }
 
     public NodeDescriptor getDescriptor() {
@@ -2560,6 +2576,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
             // for binary compatibility, this method cannot throw a checked exception
             throw new AcegiSecurityException("Failed to configure filter",e) {};
         }
+        saveQuietly();
     }
 
     public void setAuthorizationStrategy(AuthorizationStrategy a) {
@@ -2567,6 +2584,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
             a = AuthorizationStrategy.UNSECURED;
         useSecurity = true;
         authorizationStrategy = a;
+        saveQuietly();
     }
 
     public boolean isDisableRememberMe() {
@@ -2892,7 +2910,8 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
      * Gets the user of the given name.
      *
      * @return the user of the given name (which may or may not be an id), if that person exists; else null
-     * @see User#get(String,boolean), {@link User#getById(String, boolean)}
+     * @see User#get(String,boolean)
+     * @see User#getById(String, boolean)
      */
     public @CheckForNull User getUser(String name) {
         return User.get(name, User.ALLOW_USER_CREATION_VIA_URL && hasPermission(ADMINISTER));
@@ -3172,6 +3191,13 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
         SaveableListener.fireOnChange(this, getConfigFile());
     }
 
+    private void saveQuietly() {
+        try {
+            save();
+        } catch (IOException x) {
+            LOGGER.log(Level.WARNING, null, x);
+        }
+    }
 
     /**
      * Called to shut down the system.
@@ -3657,6 +3683,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
      *
      * @return null if none is in use.
      */
+    @CheckForNull
     public CrumbIssuer getCrumbIssuer() {
         return crumbIssuer;
     }
@@ -4007,16 +4034,13 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
     @RequirePOST
     public void doDoFingerprintCheck( StaplerRequest req, StaplerResponse rsp ) throws IOException, ServletException {
         // Parse the request
-        MultipartFormDataParser p = new MultipartFormDataParser(req);
-        if(isUseCrumbs() && !getCrumbIssuer().validateCrumb(req, p)) {
-            // TODO investigate whether this check can be removed
-            rsp.sendError(HttpServletResponse.SC_FORBIDDEN,"No crumb found");
-        }
-        try {
+        try (MultipartFormDataParser p = new MultipartFormDataParser(req)) {
+            if (isUseCrumbs() && !getCrumbIssuer().validateCrumb(req, p)) {
+                // TODO investigate whether this check can be removed
+                rsp.sendError(HttpServletResponse.SC_FORBIDDEN, "No crumb found");
+            }
             rsp.sendRedirect2(req.getContextPath()+"/fingerprint/"+
                 Util.getDigestOf(p.getFileItem("name").getInputStream())+'/');
-        } finally {
-            p.cleanUp();
         }
     }
 
@@ -4105,7 +4129,9 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
             restart();
         }
 
-        rsp.sendRedirect2(".");
+        if (rsp != null) {
+            rsp.sendRedirect2(".");
+        }
     }
 
     /**
@@ -4239,6 +4265,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
             }
         }
 
+        cleanUp();
         System.exit(0);
     }
 
@@ -4496,7 +4523,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
      * http://wiki.jenkins-ci.org/display/JENKINS/Tomcat#Tomcat-i18n
      */
     @Restricted(NoExternalUse.class)
-    @RestrictedSince("since TODO")
+    @RestrictedSince("2.37")
     @Deprecated
     public FormValidation doCheckURIEncoding(StaplerRequest request) throws IOException {
         return ExtensionList.lookup(URICheckEncodingMonitor.class).get(0).doCheckURIEncoding(request);
@@ -4506,7 +4533,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
      * Does not check when system default encoding is "ISO-8859-1".
      */
     @Restricted(NoExternalUse.class)
-    @RestrictedSince("since TODO")
+    @RestrictedSince("2.37")
     @Deprecated
     public static boolean isCheckURIEncodingEnabled() {
         return ExtensionList.lookup(URICheckEncodingMonitor.class).get(0).isCheckEnabled();
@@ -4603,7 +4630,7 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
      * Test a path to see if it is subject to mandatory read permission checks by container-managed security
      * @param restOfPath the URI, excluding the Jenkins root URI and query string
      * @return true if the path is subject to mandatory read permission checks
-     * @since TODO
+     * @since 2.37
      */
     public boolean isSubjectToMandatoryReadPermissionCheck(String restOfPath) {
         for (String name : ALWAYS_READABLE_PATHS) {
@@ -4885,15 +4912,11 @@ public class Jenkins extends AbstractCIBase implements DirectlyModifiableTopLeve
     private static void computeVersion(ServletContext context) {
         // set the version
         Properties props = new Properties();
-        InputStream is = null;
-        try {
-            is = Jenkins.class.getResourceAsStream("jenkins-version.properties");
+        try (InputStream is = Jenkins.class.getResourceAsStream("jenkins-version.properties")) {
             if(is!=null)
                 props.load(is);
         } catch (IOException e) {
             e.printStackTrace(); // if the version properties is missing, that's OK.
-        } finally {
-            IOUtils.closeQuietly(is);
         }
         String ver = props.getProperty("version");
         if(ver==null)   ver = UNCOMPUTED_VERSION;

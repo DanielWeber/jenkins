@@ -131,7 +131,7 @@ public abstract class ItemGroupMixIn {
     }
 
     /**
-     * {@link Item} -> name function.
+     * {@link Item} → name function.
      */
     public static final Function1<String,Item> KEYED_BY_NAME = new Function1<String, Item>() {
         public String call(Item item) {
@@ -234,6 +234,7 @@ public abstract class ItemGroupMixIn {
         }
         src.getDescriptor().checkApplicableIn(parent);
         acl.getACL().checkCreatePermission(parent, src.getDescriptor());
+        ItemListener.checkBeforeCopy(src, parent);
 
         T result = (T)createProject(src.getDescriptor(),name,false);
 

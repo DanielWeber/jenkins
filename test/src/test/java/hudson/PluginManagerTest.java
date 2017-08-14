@@ -31,7 +31,6 @@ import hudson.model.UpdateCenter;
 import hudson.model.UpdateCenter.UpdateCenterJob;
 import hudson.model.UpdateSite;
 import hudson.model.User;
-import hudson.scm.SubversionSCM;
 import hudson.security.ACL;
 import hudson.security.ACLContext;
 import hudson.util.FormValidation;
@@ -50,6 +49,7 @@ import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
 import org.apache.tools.ant.filters.StringInputStream;
 import static org.junit.Assert.*;
+import static org.junit.Assume.assumeFalse;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -166,7 +166,6 @@ public class PluginManagerTest {
                     // plugins should be already visible in the UberClassLoader
                     assertTrue(!activePlugins.isEmpty());
 
-                    uberClassLoader.loadClass(SubversionSCM.class.getName());
                     uberClassLoader.loadClass("hudson.plugins.tasks.Messages");
 
                     super.startPlugin(plugin);
@@ -213,6 +212,7 @@ public class PluginManagerTest {
     }
 
     @Test public void prevalidateConfig() throws Exception {
+        assumeFalse("TODO: Implement this test on Windows", Functions.isWindows());
         PersistedList<UpdateSite> sites = r.jenkins.getUpdateCenter().getSites();
         sites.clear();
         URL url = PluginManagerTest.class.getResource("/plugins/tasks-update-center.json");
@@ -467,6 +467,7 @@ public class PluginManagerTest {
     }
 
     @Test public void uploadDependencyResolution() throws Exception {
+        assumeFalse("TODO: Implement this test for Windows", Functions.isWindows());
         PersistedList<UpdateSite> sites = r.jenkins.getUpdateCenter().getSites();
         sites.clear();
         URL url = PluginManagerTest.class.getResource("/plugins/upload-test-update-center.json");
