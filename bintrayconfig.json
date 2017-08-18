@@ -17,17 +17,17 @@
     },
 
     "version": {
-        "name": "2.60.2",
-        "desc": "Jenkins LTS 2.60.2 + Performance patch(es)",
-        "released": "2017-08-14",
-        "vcs_tag": "jenkins-2.60.2-continental",
+        "name": "2.60.3",
+        "desc": "Jenkins LTS 2.60.3 + Performance patch(es)",
+        "released": "2017-08-18",
+        "vcs_tag": "jenkins-2.60.3-continental",
         "attributes": [],
         "gpgSign": false
     },
 
     "files":
         [
-        {"includePattern": "war/target/jenkins.war", "uploadPattern": "2.60.2/war/jenkins.war", "matrixParams": { "override": 1 } }
+        {"includePattern": "war/target/jenkins.war", "uploadPattern": "2.60.3/war/jenkins.war", "matrixParams": { "override": 1 } }
         ],
 
     "publish": true
