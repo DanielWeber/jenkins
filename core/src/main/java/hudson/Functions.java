@@ -1103,7 +1103,7 @@ public class Functions {
             ItemGroup ig = i.getParent();
             url = i.getShortUrl()+url;
 
-            if(ig== Jenkins.getInstance() || (view != null && ig == view.getOwnerItemGroup())) {
+            if(ig== Jenkins.getInstance() || (view != null && ig == view.getOwner().getItemGroup())) {
                 assert i instanceof TopLevelItem;
                 if (view != null) {
                     // assume p and the current page belong to the same view, so return a relative path
@@ -2024,7 +2024,7 @@ public class Functions {
             rsp.setHeader("X-Jenkins-Session", Jenkins.SESSION_HASH);
 
             TcpSlaveAgentListener tal = j.tcpSlaveAgentListener;
-            if (tal !=null) {
+            if (tal != null) { // headers used only by deprecated Remoting-based CLI
                 int p = tal.getAdvertisedPort();
                 rsp.setIntHeader("X-Hudson-CLI-Port", p);
                 rsp.setIntHeader("X-Jenkins-CLI-Port", p);
@@ -2040,6 +2040,15 @@ public class Functions {
             return ((ModelObjectWithContextMenu.ContextMenuVisibility) a).isVisible();
         } else {
             return true;
+        }
+    }
+
+    @Restricted(NoExternalUse.class) // for cc.xml.jelly
+    public static Collection<TopLevelItem> getCCItems(View v) {
+        if (Stapler.getCurrentRequest().getParameter("recursive") != null) {
+            return Items.getAllItems(v.getOwner().getItemGroup(), TopLevelItem.class);
+        } else {
+            return v.getItems();
         }
     }
 

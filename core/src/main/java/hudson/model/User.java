@@ -34,6 +34,8 @@ import hudson.ExtensionPoint;
 import hudson.FeedAdapter;
 import hudson.Util;
 import hudson.XmlFile;
+import hudson.init.InitMilestone;
+import hudson.init.Initializer;
 import hudson.model.Descriptor.FormException;
 import hudson.model.listeners.SaveableListener;
 import hudson.security.ACL;
@@ -48,6 +50,10 @@ import hudson.util.XStream2;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -289,7 +295,11 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
      */
     @Exported(name="property",inline=true)
     public List<UserProperty> getAllProperties() {
-        return Collections.unmodifiableList(properties);
+        if (hasPermission(Jenkins.ADMINISTER)) {
+            return Collections.unmodifiableList(properties);
+        }
+
+        return Collections.emptyList();
     }
     
     /**
@@ -427,7 +437,7 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
         byNameLock.readLock().lock();
         User u;
         try {
-            u = byName.get(idkey);
+            u = AllUsers.byName().get(idkey);
         } finally {
             byNameLock.readLock().unlock();
         }
@@ -443,7 +453,9 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
                         if (o instanceof User) {
                             if (idStrategy().equals(id, legacyUserDir.getName()) && !idStrategy().filenameOf(legacyUserDir.getName())
                                     .equals(legacyUserDir.getName())) {
-                                if (!legacyUserDir.renameTo(configFile.getParentFile())) {
+                                if (legacyUserDir.renameTo(configFile.getParentFile())) {
+                                    LOGGER.log(Level.INFO, "Migrated user record from {0} to {1}", new Object[] {legacyUserDir, configFile.getParentFile()});
+                                } else {
                                     LOGGER.log(Level.WARNING, "Failed to migrate user record from {0} to {1}",
                                             new Object[]{legacyUserDir, configFile.getParentFile()});
                                 }
@@ -460,12 +472,51 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
                 }
             }
         }
+
+        File unsanitizedLegacyConfigFile = getUnsanitizedLegacyConfigFileFor(id);
+        if (unsanitizedLegacyConfigFile.exists() && !unsanitizedLegacyConfigFile.equals(configFile)) {
+            File ancestor = unsanitizedLegacyConfigFile.getParentFile();
+            if (!configFile.exists()) {
+                try {
+                    Files.createDirectory(configFile.getParentFile().toPath());
+                    Files.move(unsanitizedLegacyConfigFile.toPath(), configFile.toPath());
+                    LOGGER.log(Level.INFO, "Migrated unsafe user record from {0} to {1}", new Object[] {unsanitizedLegacyConfigFile, configFile});
+                } catch (IOException | InvalidPathException e) {
+                    LOGGER.log(
+                            Level.WARNING,
+                            String.format("Failed to migrate user record from %s to %s, see SECURITY-499 for more information", idStrategy().legacyFilenameOf(id), idStrategy().filenameOf(id)),
+                            e);
+                }
+            }
+
+            // Don't clean up ancestors with other children; the directories should be cleaned up when the last child
+            // is migrated
+            File tmp = ancestor;
+            try {
+                while (!ancestor.equals(getRootDir())) {
+                    try (DirectoryStream<Path> stream = Files.newDirectoryStream(ancestor.toPath())) {
+                        if (!stream.iterator().hasNext()) {
+                            tmp = ancestor;
+                            ancestor = tmp.getParentFile();
+                            Files.deleteIfExists(tmp.toPath());
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            } catch (IOException | InvalidPathException e) {
+                if (LOGGER.isLoggable(Level.FINE)) {
+                    LOGGER.log(Level.FINE, "Could not delete " + tmp + " when cleaning up legacy user directories", e);
+                }
+            }
+        }
+
         if (u==null && (create || configFile.exists())) {
             User tmp = new User(id, fullName);
             User prev;
             byNameLock.readLock().lock();
             try {
-                prev = byName.putIfAbsent(idkey, u = tmp);
+                prev = AllUsers.byName().putIfAbsent(idkey, u = tmp);
             } finally {
                 byNameLock.readLock().unlock();
             }
@@ -535,36 +586,15 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
         return getOrCreate(id, id, create);
     }
 
-    private static volatile long lastScanned;
-
     /**
      * Gets all the users.
      */
     public static @Nonnull Collection<User> getAll() {
         final IdStrategy strategy = idStrategy();
-        if(System.currentTimeMillis() -lastScanned>10000) {
-            // occasionally scan the file system to check new users
-            // whether we should do this only once at start up or not is debatable.
-            // set this right away to avoid another thread from doing the same thing while we do this.
-            // having two threads doing the work won't cause race condition, but it's waste of time.
-            lastScanned = System.currentTimeMillis();
-
-            File[] subdirs = getRootDir().listFiles((FileFilter)DirectoryFileFilter.INSTANCE);
-            if(subdirs==null)       return Collections.emptyList(); // shall never happen
-
-            for (File subdir : subdirs)
-                if(new File(subdir,"config.xml").exists()) {
-                    String name = strategy.idFromFilename(subdir.getName());
-                    User.getOrCreate(name, name, true);
-                }
-
-            lastScanned = System.currentTimeMillis();
-        }
-
         byNameLock.readLock().lock();
         ArrayList<User> r;
         try {
-            r = new ArrayList<User>(byName.values());
+            r = new ArrayList<User>(AllUsers.byName().values());
         } finally {
             byNameLock.readLock().unlock();
         }
@@ -578,27 +608,32 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
     }
 
     /**
-     * Reloads the configuration from disk.
+     * To be called from {@link Jenkins#reload} only.
      */
+    @Restricted(NoExternalUse.class)
     public static void reload() {
         byNameLock.readLock().lock();
         try {
-            for (User u : byName.values()) {
-                u.load();
-            }
+            AllUsers.byName().clear();
         } finally {
             byNameLock.readLock().unlock();
-            UserDetailsCache.get().invalidateAll();
         }
+        UserDetailsCache.get().invalidateAll();
+        AllUsers.scanAll();
     }
 
     /**
-     * Stop gap hack. Don't use it. To be removed in the trunk.
+     * @deprecated Used to be called by test harnesses; now ignored in that case.
      */
+    @Deprecated
     public static void clear() {
+        if (ExtensionList.lookup(AllUsers.class).isEmpty()) {
+            // Historically this was called by JenkinsRule prior to startup. Ignore!
+            return;
+        }
         byNameLock.writeLock().lock();
         try {
-            byName.clear();
+            AllUsers.byName().clear();
         } finally {
             byNameLock.writeLock().unlock();
         }
@@ -612,6 +647,7 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
         final IdStrategy strategy = idStrategy();
         byNameLock.writeLock().lock();
         try {
+            ConcurrentMap<String, User> byName = AllUsers.byName();
             for (Map.Entry<String, User> e : byName.entrySet()) {
                 String idkey = strategy.keyFor(e.getValue().id);
                 if (!idkey.equals(e.getKey())) {
@@ -700,6 +736,10 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
         });
     }
 
+    private static File getUnsanitizedLegacyConfigFileFor(String id) {
+        return new File(getRootDir(), idStrategy().legacyFilenameOf(id) + "/config.xml");
+    }
+
     /**
      * Gets the directory where Hudson stores user information.
      */
@@ -748,6 +788,19 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
         SaveableListener.fireOnChange(this, getConfigFile());
     }
 
+    private Object writeReplace() {
+        return XmlFile.replaceIfNotAtTopLevel(this, () -> new Replacer(this));
+    }
+    private static class Replacer {
+        private final String id;
+        Replacer(User u) {
+            id = u.getId();
+        }
+        private Object readResolve() {
+            return getById(id, false);
+        }
+    }
+
     /**
      * Deletes the data directory and removes this user from Hudson.
      *
@@ -758,7 +811,7 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
         final IdStrategy strategy = idStrategy();
         byNameLock.readLock().lock();
         try {
-            byName.remove(strategy.keyFor(id));
+            AllUsers.byName().remove(strategy.keyFor(id));
         } finally {
             byNameLock.readLock().unlock();
         }
@@ -865,16 +918,7 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
     }
 
     /**
-     * Keyed by {@link User#id}. This map is used to ensure
-     * singleton-per-id semantics of {@link User} objects.
-     *
-     * The key needs to be generated by {@link IdStrategy#keyFor(String)}.
-     */
-    @GuardedBy("byNameLock")
-    private static final ConcurrentMap<String,User> byName = new ConcurrentHashMap<String, User>();
-
-    /**
-     * This lock is used to guard access to the {@link #byName} map. Use
+     * This lock is used to guard access to the {@link AllUsers#byName} map. Use
      * {@link java.util.concurrent.locks.ReadWriteLock#readLock()} for normal access and
      * {@link java.util.concurrent.locks.ReadWriteLock#writeLock()} for {@link #rekey()} or any other operation
      * that requires operating on the map as a whole.
@@ -901,14 +945,6 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
                         || base.hasPermission(a, permission);
             }
         };
-    }
-
-    public void checkPermission(Permission permission) {
-        getACL().checkPermission(permission);
-    }
-
-    public boolean hasPermission(Permission permission) {
-        return getACL().hasPermission(permission);
     }
 
     /**
@@ -952,10 +988,6 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
         return r;
     }
 
-    public Descriptor getDescriptorByName(String className) {
-        return Jenkins.getInstance().getDescriptorByName(className);
-    }
-    
     public Object getDynamic(String token) {
         for(Action action: getTransientActions()){
             if(Objects.equals(action.getUrlName(), token))
@@ -1011,6 +1043,41 @@ public class User extends AbstractModelObject implements AccessControlled, Descr
         final Set<String> res = new HashSet<>();
         res.addAll(Arrays.asList(ILLEGAL_PERSISTED_USERNAMES));
         return res;
+    }
+
+    /** Per-{@link Jenkins} holder of all known {@link User}s. */
+    @Extension
+    @Restricted(NoExternalUse.class)
+    public static final class AllUsers {
+
+        @Initializer(after = InitMilestone.JOB_LOADED) // so Jenkins.loadConfig has been called
+        public static void scanAll() {
+            IdStrategy strategy = idStrategy();
+            File[] subdirs = getRootDir().listFiles((FileFilter) DirectoryFileFilter.INSTANCE);
+            if (subdirs != null) {
+                for (File subdir : subdirs) {
+                    if (new File(subdir, "config.xml").exists()) {
+                        String name = strategy.idFromFilename(subdir.getName());
+                        getOrCreate(name, /* <init> calls load(), probably clobbering this anyway */name, true);
+                    }
+                }
+            }
+        }
+
+        @GuardedBy("User.byNameLock")
+        private final ConcurrentMap<String,User> byName = new ConcurrentHashMap<String, User>();
+
+        /**
+         * Keyed by {@link User#id}. This map is used to ensure
+         * singleton-per-id semantics of {@link User} objects.
+         *
+         * The key needs to be generated by {@link IdStrategy#keyFor(String)}.
+         */
+        @GuardedBy("User.byNameLock")
+        static ConcurrentMap<String,User> byName() {
+            return ExtensionList.lookupSingleton(AllUsers.class).byName;
+        }
+
     }
 
     public static abstract class CanonicalIdResolver extends AbstractDescribableImpl<CanonicalIdResolver> implements ExtensionPoint, Comparable<CanonicalIdResolver> {

@@ -114,6 +114,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import static javax.servlet.http.HttpServletResponse.SC_BAD_REQUEST;
 import static jenkins.scm.RunWithSCM.*;
@@ -221,7 +222,7 @@ public abstract class View extends AbstractModelObject implements AccessControll
      * Gets the {@link TopLevelItem} of the given name.
      */
     public TopLevelItem getItem(String name) {
-        return getOwnerItemGroup().getItem(name);
+        return getOwner().getItemGroup().getItem(name);
     }
 
     /**
@@ -267,38 +268,21 @@ public abstract class View extends AbstractModelObject implements AccessControll
         return owner;
     }
 
-    /**
-     * Backward-compatible way of getting {@code getOwner().getItemGroup()}
-     */
+    /** @deprecated call {@link ViewGroup#getItemGroup} directly */
+    @Deprecated
     public ItemGroup<? extends TopLevelItem> getOwnerItemGroup() {
-        try {
-            return owner.getItemGroup();
-        } catch (AbstractMethodError e) {
-            return Jenkins.getInstance();
-        }
+        return owner.getItemGroup();
     }
 
+    /** @deprecated call {@link ViewGroup#getPrimaryView} directly */
+    @Deprecated
     public View getOwnerPrimaryView() {
-        try {
-            return _getOwnerPrimaryView();
-        } catch (AbstractMethodError e) {
-            return null;
-        }
-    }
-
-    private View _getOwnerPrimaryView() {
         return owner.getPrimaryView();
     }
 
+    /** @deprecated call {@link ViewGroup#getViewActions} directly */
+    @Deprecated
     public List<Action> getOwnerViewActions() {
-        try {
-            return _getOwnerViewActions();
-        } catch (AbstractMethodError e) {
-            return Jenkins.getInstance().getActions();
-        }
-    }
-
-    private List<Action> _getOwnerViewActions() {
         return owner.getViewActions();
     }
 
@@ -435,7 +419,7 @@ public abstract class View extends AbstractModelObject implements AccessControll
      * If true, this is a view that renders the top page of Hudson.
      */
     public boolean isDefault() {
-        return getOwnerPrimaryView()==this;
+        return getOwner().getPrimaryView()==this;
     }
     
     public List<Computer> getComputers() {
@@ -472,25 +456,49 @@ public abstract class View extends AbstractModelObject implements AccessControll
         return false;
     }
 
+    private final static int FILTER_LOOP_MAX_COUNT = 10;
+
     private List<Queue.Item> filterQueue(List<Queue.Item> base) {
         if (!isFilterQueue()) {
             return base;
         }
-
         Collection<TopLevelItem> items = getItems();
-        List<Queue.Item> result = new ArrayList<Queue.Item>();
-        for (Queue.Item qi : base) {
-            if (items.contains(qi.task)) {
-                result.add(qi);
-            } else
-            if (qi.task instanceof AbstractProject<?, ?>) {
-                AbstractProject<?,?> project = (AbstractProject<?, ?>) qi.task;
-                if (items.contains(project.getRootProject())) {
-                    result.add(qi);
-                }
+        return base.stream().filter(qi -> filterQueueItemTest(qi, items))
+                .collect(Collectors.toList());
+    }
+
+    private boolean filterQueueItemTest(Queue.Item item, Collection<TopLevelItem> viewItems) {
+        // Check if the task of parent tasks are in the list of viewItems.
+        // Pipeline jobs and other jobs which allow parts require us to
+        // check owner tasks as well.
+        Queue.Task currentTask = item.task;
+        for (int count = 1;; count++) {
+            if (viewItems.contains(currentTask)) {
+                return true;
+            }
+            Queue.Task next = currentTask.getOwnerTask();
+            if (next == currentTask) {
+                break;
+            } else {
+                currentTask = next;
+            }
+            if (count == FILTER_LOOP_MAX_COUNT) {
+                LOGGER.warning(String.format(
+                        "Failed to find root task for queue item '%s' for " +
+                        "view '%s' in under %d iterations, aborting!",
+                        item.getDisplayName(), getDisplayName(),
+                        FILTER_LOOP_MAX_COUNT));
+                break;
             }
         }
-        return result;
+        // Check root project for sub-job projects (e.g. matrix jobs).
+        if (item.task instanceof AbstractProject<?, ?>) {
+            AbstractProject<?,?> project = (AbstractProject<?, ?>) item.task;
+            if (viewItems.contains(project.getRootProject())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Queue.Item> getQueueItems() {
@@ -543,7 +551,7 @@ public abstract class View extends AbstractModelObject implements AccessControll
      */
     public List<Action> getActions() {
     	List<Action> result = new ArrayList<Action>();
-    	result.addAll(getOwnerViewActions());
+    	result.addAll(getOwner().getViewActions());
     	synchronized (this) {
     		if (transientActions == null) {
                 updateTransientActions();
@@ -594,14 +602,6 @@ public abstract class View extends AbstractModelObject implements AccessControll
      */
     public ACL getACL() {
         return Jenkins.getInstance().getAuthorizationStrategy().getACL(this);
-    }
-
-    public void checkPermission(Permission p) {
-        getACL().checkPermission(p);
-    }
-
-    public boolean hasPermission(Permission p) {
-        return getACL().hasPermission(p);
     }
 
     /** @deprecated Does not work properly with moved jobs. Use {@link ItemListener#onLocationChanged} instead. */
@@ -1055,7 +1055,7 @@ public abstract class View extends AbstractModelObject implements AccessControll
             return FormValidation.error(e.getMessage());
         }
 
-        if (getOwnerItemGroup().getItem(value) != null) {
+        if (getOwner().getItemGroup().getItem(value) != null) {
             return FormValidation.error(Messages.Hudson_JobAlreadyExists(value));
         }
 
@@ -1070,6 +1070,10 @@ public abstract class View extends AbstractModelObject implements AccessControll
      */
     @Restricted(DoNotUse.class)
     public Categories doItemCategories(StaplerRequest req, StaplerResponse rsp, @QueryParameter String iconStyle) throws IOException, ServletException {
+
+        rsp.addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        rsp.addHeader("Pragma", "no-cache");
+        rsp.addHeader("Expires", "0");
         getOwner().checkPermission(Item.CREATE);
         Categories categories = new Categories();
         int order = 0;
@@ -1081,7 +1085,7 @@ public abstract class View extends AbstractModelObject implements AccessControll
         } else {
             ctx = null;
         }
-        for (TopLevelItemDescriptor descriptor : DescriptorVisibilityFilter.apply(getOwnerItemGroup(), Items.all(Jenkins.getAuthentication(), getOwnerItemGroup()))) {
+        for (TopLevelItemDescriptor descriptor : DescriptorVisibilityFilter.apply(getOwner().getItemGroup(), Items.all(Jenkins.getAuthentication(), getOwner().getItemGroup()))) {
             ItemCategory ic = ItemCategory.getCategory(descriptor);
             Map<String, Serializable> metadata = new HashMap<String, Serializable>();
 

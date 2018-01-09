@@ -106,7 +106,6 @@ import jenkins.SoloFilePathFilter;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import jenkins.util.ContextResettingExecutorService;
-import jenkins.util.SystemProperties;
 import jenkins.util.VirtualFile;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
@@ -235,9 +234,9 @@ public final class FilePath implements Serializable {
      *
      * @param channel
      *      To create a path that represents a remote path, pass in a {@link Channel}
-     *      that's connected to that machine. If null, that means the local file path.
+     *      that's connected to that machine. If {@code null}, that means the local file path.
      */
-    public FilePath(VirtualChannel channel, String remote) {
+    public FilePath(@CheckForNull VirtualChannel channel, @Nonnull String remote) {
         this.channel = channel instanceof LocalChannel ? null : channel;
         this.remote = normalize(remote);
     }
@@ -249,7 +248,7 @@ public final class FilePath implements Serializable {
      * A "local" path means a file path on the computer where the
      * constructor invocation happened.
      */
-    public FilePath(File localPath) {
+    public FilePath(@Nonnull File localPath) {
         this.channel = null;
         this.remote = normalize(localPath.getPath());
     }
@@ -259,12 +258,12 @@ public final class FilePath implements Serializable {
      * @param base starting point for resolution, and defines channel
      * @param rel a path which if relative will be resolved against base
      */
-    public FilePath(FilePath base, String rel) {
+    public FilePath(@Nonnull FilePath base, @Nonnull String rel) {
         this.channel = base.channel;
         this.remote = normalize(resolvePathIfRelative(base, rel));
     }
 
-    private String resolvePathIfRelative(FilePath base, String rel) {
+    private String resolvePathIfRelative(@Nonnull FilePath base, @Nonnull String rel) {
         if(isAbsolute(rel)) return rel;
         if(base.isUnix()) {
             // shouldn't need this replace, but better safe than sorry
@@ -279,7 +278,7 @@ public final class FilePath implements Serializable {
     /**
      * Is the given path name an absolute path?
      */
-    private static boolean isAbsolute(String rel) {
+    private static boolean isAbsolute(@Nonnull String rel) {
         return rel.startsWith("/") || DRIVE_PATTERN.matcher(rel).matches() || UNC_PATTERN.matcher(rel).matches();
     }
 
@@ -291,7 +290,7 @@ public final class FilePath implements Serializable {
      * {@link File#getParent()} etc cannot handle ".." and "." in the path component very well,
      * so remove them.
      */
-    private static String normalize(String path) {
+    private static String normalize(@Nonnull String path) {
         StringBuilder buf = new StringBuilder();
         // Check for prefix designating absolute path
         Matcher m = ABSOLUTE_PREFIX_PATTERN.matcher(path);
@@ -2042,7 +2041,7 @@ public final class FilePath implements Serializable {
 
     /**
      * With fix to JENKINS-11251 (remoting 2.15), this is no longer necessary.
-     * But I'm keeping it for a while so that users who manually deploy slave.jar has time to deploy new version
+     * But I'm keeping it for a while so that users who manually deploy agent.jar has time to deploy new version
      * before this goes away.
      */
     private void syncIO() throws InterruptedException {
@@ -2050,9 +2049,9 @@ public final class FilePath implements Serializable {
             if (channel!=null)
                 channel.syncLocalIO();
         } catch (AbstractMethodError e) {
-            // legacy slave.jar. Handle this gracefully
+            // legacy agent.jar. Handle this gracefully
             try {
-                LOGGER.log(Level.WARNING,"Looks like an old slave.jar. Please update "+ Which.jarFile(Channel.class)+" to the new version",e);
+                LOGGER.log(Level.WARNING,"Looks like an old agent.jar. Please update "+ Which.jarFile(Channel.class)+" to the new version",e);
             } catch (IOException _) {
                 // really ignore this time
             }
@@ -2166,7 +2165,7 @@ public final class FilePath implements Serializable {
                                 writing(new File(dest, target));
                                 Util.createSymlink(dest, target, relativePath, TaskListener.NULL);
                             } catch (InterruptedException x) {
-                                throw (IOException) new IOException(x.toString()).initCause(x);
+                                throw new IOException(x);
                             }
                             count.incrementAndGet();
                         }
@@ -2199,7 +2198,12 @@ public final class FilePath implements Serializable {
                 future.get();
                 return future2.get();
             } catch (ExecutionException e) {
-                throw new IOException(e);
+                Throwable cause = e.getCause();
+                if (cause == null) cause = e;
+                throw cause instanceof IOException
+                        ? (IOException) cause
+                        : new IOException(cause)
+                ;
             }
         } else {
             // remote -> local copy
@@ -2221,7 +2225,8 @@ public final class FilePath implements Serializable {
                     throw e;    // the remote side completed successfully, so the error must be local
                 } catch (ExecutionException x) {
                     // report both errors
-                    throw new IOException(Functions.printThrowable(e),x);
+                    e.addSuppressed(x);
+                    throw e;
                 } catch (TimeoutException _) {
                     // remote is hanging
                     throw e;
@@ -2230,7 +2235,12 @@ public final class FilePath implements Serializable {
             try {
                 return future.get();
             } catch (ExecutionException e) {
-                throw new IOException(e);
+                Throwable cause = e.getCause();
+                if (cause == null) cause = e;
+                throw cause instanceof IOException
+                        ? (IOException) cause
+                        : new IOException(cause)
+                ;
             }
         }
     }
@@ -2324,6 +2334,7 @@ public final class FilePath implements Serializable {
     }
 
     private static final class IsUnix extends MasterToSlaveCallable<Boolean,IOException> {
+        @Nonnull
         public Boolean call() throws IOException {
             return File.pathSeparatorChar==':';
         }
@@ -2359,7 +2370,7 @@ public final class FilePath implements Serializable {
      * Default bound for {@link #validateAntFileMask(String, int, boolean)}.
      * @since 1.592
      */
-    public static int VALIDATE_ANT_FILE_MASK_BOUND = SystemProperties.getInteger(FilePath.class.getName() + ".VALIDATE_ANT_FILE_MASK_BOUND", 10000);
+    public static int VALIDATE_ANT_FILE_MASK_BOUND = Integer.getInteger(FilePath.class.getName() + ".VALIDATE_ANT_FILE_MASK_BOUND", 10000);
 
     /**
      * Like {@link #validateAntFileMask(String)} but performing only a bounded number of operations.
@@ -2830,6 +2841,11 @@ public final class FilePath implements Serializable {
                             new NamingThreadFactory(new DaemonThreadFactory(), "FilePath.localPool"))
             ));
 
+    
+    /**
+     * Channel to the current instance.
+     */
+    @Nonnull
     public static final LocalChannel localChannel = new LocalChannel(threadPoolForRemoting);
 
     private @Nonnull SoloFilePathFilter filterNonNull() {
