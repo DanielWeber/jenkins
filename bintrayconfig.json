@@ -17,17 +17,17 @@
     },
 
     "version": {
-        "name": "2.89.2",
-        "desc": "Jenkins LTS 2.89.2 + Performance patch(es)",
+        "name": "2.89.3",
+        "desc": "Jenkins LTS 2.89.3 + Performance patch(es)",
         "released": "2018-01-09",
-        "vcs_tag": "jenkins-2.89.2-continental",
+        "vcs_tag": "jenkins-2.89.3-continental",
         "attributes": [],
         "gpgSign": false
     },
 
     "files":
         [
-        {"includePattern": "war/target/jenkins.war", "uploadPattern": "2.89.2/war/jenkins.war", "matrixParams": { "override": 1 } }
+        {"includePattern": "war/target/jenkins.war", "uploadPattern": "2.89.3/war/jenkins.war", "matrixParams": { "override": 1 } }
         ],
 
     "publish": true
