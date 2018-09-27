@@ -1256,7 +1256,7 @@ public class Fingerprint implements ModelObject, Saveable {
             AtomicFileWriter afw = new AtomicFileWriter(file);
             try {
                 PrintWriter w = new PrintWriter(afw);
-                w.println("<?xml version='1.0' encoding='UTF-8'?>");
+                w.println("<?xml version='1.1' encoding='UTF-8'?>");
                 w.println("<fingerprint>");
                 w.print("  <timestamp>");
                 w.print(DATE_CONVERTER.toString(timestamp));
@@ -1366,7 +1366,12 @@ public class Fingerprint implements ModelObject, Saveable {
             start = System.currentTimeMillis();
 
         try {
-            Fingerprint f = (Fingerprint) configFile.read();
+            Object loaded = configFile.read();
+            if (!(loaded instanceof Fingerprint)) {
+                throw new IOException("Unexpected Fingerprint type. Expected " + Fingerprint.class + " or subclass but got "
+                        + (loaded != null ? loaded.getClass() : "null"));
+            }
+            Fingerprint f = (Fingerprint) loaded;
             if(logger.isLoggable(Level.FINE))
                 logger.fine("Loading fingerprint "+file+" took "+(System.currentTimeMillis()-start)+"ms");
             if (f.facets==null)
@@ -1443,14 +1448,14 @@ public class Fingerprint implements ModelObject, Saveable {
 
             // To get the item existence fact, a user needs Item.DISCOVER for the item
             // and Item.READ for all container folders.
-            boolean canDiscoverTheItem = itemBySystemUser.getACL().hasPermission(userAuth, Item.DISCOVER);
+            boolean canDiscoverTheItem = itemBySystemUser.hasPermission(userAuth, Item.DISCOVER);
             if (canDiscoverTheItem) {
                 ItemGroup<?> current = itemBySystemUser.getParent();
                 do {
                     if (current instanceof Item) {
                         final Item i = (Item) current;
                         current = i.getParent();
-                        if (!i.getACL().hasPermission(userAuth, Item.READ)) {
+                        if (!i.hasPermission(userAuth, Item.READ)) {
                             canDiscoverTheItem = false;
                         }
                     } else {

@@ -46,6 +46,7 @@ import hudson.model.Queue.BlockedItem;
 import hudson.model.Queue.Executable;
 import hudson.model.Queue.WaitingItem;
 import hudson.model.labels.LabelExpression;
+import hudson.model.listeners.SaveableListener;
 import hudson.model.queue.CauseOfBlockage;
 import hudson.model.queue.QueueTaskDispatcher;
 import hudson.model.queue.QueueTaskFuture;
@@ -943,8 +944,12 @@ public class QueueTest {
         project.getBuildersList().add(new SleepBuilder(10));
         project.scheduleBuild2(0);
 
+        User alice = User.getById("alice", true);
+        User bob = User.getById("bob", true);
+        User james = User.getById("james", true);
+
         JenkinsRule.WebClient webClient = r.createWebClient();
-        webClient.login("bob", "bob");
+        webClient.withBasicApiToken(bob);
         XmlPage p = webClient.goToXml("queue/api/xml");
 
         //bob has permission on the project and will be able to see it in the queue together with information such as the URL and the name.
@@ -959,13 +964,15 @@ public class QueueTest {
                 }
             }
         }
+
         webClient = r.createWebClient();
-        webClient.login("alice");
+        webClient.withBasicApiToken(alice);
         XmlPage p2 = webClient.goToXml("queue/api/xml");
         //alice does not have permission on the project and will not see it in the queue.
         assertTrue(p2.getByXPath("/queue/node()").isEmpty());
+
         webClient = r.createWebClient();
-        webClient.login("james");
+        webClient.withBasicApiToken(james);
         XmlPage p3 = webClient.goToXml("queue/api/xml");
 
         //james has DISCOVER permission on the project and will only be able to see the task name.
@@ -975,9 +982,9 @@ public class QueueTest {
 
         // Also check individual item exports.
         String url = project.getQueueItem().getUrl() + "api/xml";
-        r.createWebClient().login("bob").goToXml(url); // OK, 200
-        r.createWebClient().login("james").assertFails(url, HttpURLConnection.HTTP_FORBIDDEN); // only DISCOVER → AccessDeniedException
-        r.createWebClient().login("alice").assertFails(url, HttpURLConnection.HTTP_NOT_FOUND); // not even DISCOVER
+        r.createWebClient().withBasicApiToken(bob).goToXml(url); // OK, 200
+        r.createWebClient().withBasicApiToken(james).assertFails(url, HttpURLConnection.HTTP_FORBIDDEN); // only DISCOVER → AccessDeniedException
+        r.createWebClient().withBasicApiToken(alice).assertFails(url, HttpURLConnection.HTTP_NOT_FOUND); // not even DISCOVER
     }
 
     //we force the project not to be executed so that it stays in the queue
@@ -1011,5 +1018,23 @@ public class QueueTest {
         CauseOfBlockage expected = new BlockedBecauseOfBuildInProgress(t1.getFirstBuild());
 
         assertEquals(expected.getShortDescription(), actual.getShortDescription());
+    }
+
+    @Test @LocalData
+    public void load_queue_xml() {
+        Queue q = r.getInstance().getQueue();
+        Queue.Item[] items = q.getItems();
+        assertEquals(Arrays.asList(items).toString(), 11, items.length);
+        assertEquals("Loading the queue should not generate saves", 0, QueueSaveSniffer.count);
+    }
+
+    @TestExtension("load_queue_xml")
+    public static final class QueueSaveSniffer extends SaveableListener {
+        private static int count = 0;
+        @Override public void onChange(Saveable o, XmlFile file) {
+            if (o instanceof Queue) {
+                count++;
+            }
+        }
     }
 }

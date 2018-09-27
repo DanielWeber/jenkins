@@ -26,7 +26,6 @@ package hudson.model;
 
 import com.thoughtworks.xstream.converters.ConversionException;
 import com.thoughtworks.xstream.io.StreamException;
-import com.thoughtworks.xstream.io.xml.Xpp3Driver;
 import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.ExtensionPoint;
@@ -1070,11 +1069,11 @@ public abstract class View extends AbstractModelObject implements AccessControll
      */
     @Restricted(DoNotUse.class)
     public Categories doItemCategories(StaplerRequest req, StaplerResponse rsp, @QueryParameter String iconStyle) throws IOException, ServletException {
+        getOwner().checkPermission(Item.CREATE);
 
         rsp.addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         rsp.addHeader("Pragma", "no-cache");
         rsp.addHeader("Expires", "0");
-        getOwner().checkPermission(Item.CREATE);
         Categories categories = new Categories();
         int order = 0;
         JellyContext ctx;
@@ -1213,7 +1212,8 @@ public abstract class View extends AbstractModelObject implements AccessControll
             // Do not allow overwriting view name as it might collide with another
             // view in same ViewGroup and might not satisfy Jenkins.checkGoodName.
             String oldname = name;
-            Object o = Jenkins.XSTREAM.unmarshal(new Xpp3Driver().createReader(in), this);
+            ViewGroup oldOwner = owner; // oddly, this field is not transient
+            Object o = Jenkins.XSTREAM2.unmarshal(XStream2.getDefaultDriver().createReader(in), this, null, true);
             if (!o.getClass().equals(getClass())) {
                 // ensure that we've got the same view type. extending this code to support updating
                 // to different view type requires destroying & creating a new view type
@@ -1222,6 +1222,7 @@ public abstract class View extends AbstractModelObject implements AccessControll
                     "the view with the new view type.");
             }
             name = oldname;
+            owner = oldOwner;
         } catch (StreamException | ConversionException | Error e) {// mostly reflection errors
             throw new IOException("Unable to read",e);
         }

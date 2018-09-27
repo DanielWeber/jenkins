@@ -1,0 +1,6 @@
+---
+ath:
+  useLocalSnapshots: false
+  athRevision: "418902d61f8ed920e18f6cfaa701d37afc92739e"
+  tests:
+    - '*'
