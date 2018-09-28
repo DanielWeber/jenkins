@@ -8,6 +8,7 @@ cache:
     - $HOME/.m2
 deploy:
   provider: bintray
+  skip_cleanup: true
   file: bintrayconfig.json
   user: danielweber
   key:
