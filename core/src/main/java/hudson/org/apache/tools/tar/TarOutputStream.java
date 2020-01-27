@@ -23,13 +23,17 @@
 
 package hudson.org.apache.tools.tar;
 
+import hudson.RestrictedSince;
 import org.apache.tools.tar.TarBuffer;
 import org.apache.tools.tar.TarConstants;
 import org.apache.tools.tar.TarEntry;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 import java.io.FilterOutputStream;
 import java.io.OutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * The TarOutputStream writes a UNIX tar archive as an OutputStream.
@@ -40,6 +44,8 @@ import java.io.IOException;
  *
  */
 @Deprecated
+@Restricted(NoExternalUse.class)
+@RestrictedSince("2.200")
 public class TarOutputStream extends FilterOutputStream {
     /** Fail if a long file name is required in the archive. */
     public static final int LONGFILE_ERROR = 0;
@@ -186,7 +192,7 @@ public class TarOutputStream extends FilterOutputStream {
                 TarEntry longLinkEntry = new TarEntry(TarConstants.GNU_LONGLINK,
                                                       TarConstants.LF_GNUTYPE_LONGNAME);
 
-                byte[] name = entry.getName().getBytes("UTF-8");
+                byte[] name = entry.getName().getBytes(StandardCharsets.UTF_8);
                 longLinkEntry.setSize(name.length + 1);
                 putNextEntry(longLinkEntry);
                 write(name);

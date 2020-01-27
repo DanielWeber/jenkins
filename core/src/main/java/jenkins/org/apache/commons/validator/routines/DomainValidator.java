@@ -17,6 +17,7 @@
 /* Copied from commons-validator:commons-validator:1.6, with [PATCH] modifications */
 package jenkins.org.apache.commons.validator.routines;
 
+import jenkins.util.MemoryReductionUtil;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 
@@ -49,11 +50,11 @@ import java.util.Locale;
  *
  *   <ul>
  *     <li>{@link #isValidInfrastructureTld} - validates infrastructure TLDs
- *         (<code>.arpa</code>, etc.)</li>
+ *         ({@code .arpa}, etc.)</li>
  *     <li>{@link #isValidGenericTld} - validates generic TLDs
- *         (<code>.com, .org</code>, etc.)</li>
+ *         ({@code .com, .org}, etc.)</li>
  *     <li>{@link #isValidCountryCodeTld} - validates country code TLDs
- *         (<code>.us, .uk, .cn</code>, etc.)</li>
+ *         ({@code .us, .uk, .cn}, etc.)</li>
  *   </ul>
  *
  * <p>
@@ -71,8 +72,6 @@ import java.util.Locale;
 public class DomainValidator implements Serializable {
     
     private static final int MAX_DOMAIN_LENGTH = 253;
-    
-    private static final String[] EMPTY_STRING_ARRAY = new String[0];
     
     private static final long serialVersionUID = -4407125112880174009L;
     
@@ -150,7 +149,7 @@ public class DomainValidator implements Serializable {
     }
     
     /**
-     * Returns true if the specified <code>String</code> parses
+     * Returns true if the specified {@code String} parses
      * as a valid domain name with a recognized top-level domain.
      * The parsing is case-insensitive.
      * @param domain the parameter to check for domain name syntax
@@ -195,7 +194,7 @@ public class DomainValidator implements Serializable {
     }
     
     /**
-     * Returns true if the specified <code>String</code> matches any
+     * Returns true if the specified {@code String} matches any
      * IANA-defined top-level domain. Leading dots are ignored if present.
      * The search is case-insensitive.
      * @param tld the parameter to check for TLD status, not null
@@ -212,7 +211,7 @@ public class DomainValidator implements Serializable {
     }
     
     /**
-     * Returns true if the specified <code>String</code> matches any
+     * Returns true if the specified {@code String} matches any
      * IANA-defined infrastructure top-level domain. Leading dots are
      * ignored if present. The search is case-insensitive.
      * @param iTld the parameter to check for infrastructure TLD status, not null
@@ -224,7 +223,7 @@ public class DomainValidator implements Serializable {
     }
     
     /**
-     * Returns true if the specified <code>String</code> matches any
+     * Returns true if the specified {@code String} matches any
      * IANA-defined generic top-level domain. Leading dots are ignored
      * if present. The search is case-insensitive.
      * @param gTld the parameter to check for generic TLD status, not null
@@ -237,7 +236,7 @@ public class DomainValidator implements Serializable {
     }
     
     /**
-     * Returns true if the specified <code>String</code> matches any
+     * Returns true if the specified {@code String} matches any
      * IANA-defined country code top-level domain. Leading dots are
      * ignored if present. The search is case-insensitive.
      * @param ccTld the parameter to check for country code TLD status, not null
@@ -250,7 +249,7 @@ public class DomainValidator implements Serializable {
     }
     
     /**
-     * Returns true if the specified <code>String</code> matches any
+     * Returns true if the specified {@code String} matches any
      * widely used "local" domains (localhost or localdomain). Leading dots are
      * ignored if present. The search is case-insensitive.
      * @param lTld the parameter to check for local TLD status, not null
@@ -1853,16 +1852,16 @@ public class DomainValidator implements Serializable {
      * using the getInstance methods which are all (now) synchronised.
      */
     // WARNING: this array MUST be sorted, otherwise it cannot be searched reliably using binary search
-    private static volatile String[] countryCodeTLDsPlus = EMPTY_STRING_ARRAY;
+    private static volatile String[] countryCodeTLDsPlus = MemoryReductionUtil.EMPTY_STRING_ARRAY;
     
     // WARNING: this array MUST be sorted, otherwise it cannot be searched reliably using binary search
-    private static volatile String[] genericTLDsPlus = EMPTY_STRING_ARRAY;
+    private static volatile String[] genericTLDsPlus = MemoryReductionUtil.EMPTY_STRING_ARRAY;
     
     // WARNING: this array MUST be sorted, otherwise it cannot be searched reliably using binary search
-    private static volatile String[] countryCodeTLDsMinus = EMPTY_STRING_ARRAY;
+    private static volatile String[] countryCodeTLDsMinus = MemoryReductionUtil.EMPTY_STRING_ARRAY;
     
     // WARNING: this array MUST be sorted, otherwise it cannot be searched reliably using binary search
-    private static volatile String[] genericTLDsMinus = EMPTY_STRING_ARRAY;
+    private static volatile String[] genericTLDsMinus = MemoryReductionUtil.EMPTY_STRING_ARRAY;
     
     /**
      * enum used by {@link DomainValidator#updateTLDOverride(DomainValidator.ArrayType, String[])}
@@ -1887,16 +1886,15 @@ public class DomainValidator implements Serializable {
         INFRASTRUCTURE_RO,
         /** Get a copy of the local table */
         LOCAL_RO
-        ;
-    };
-    
+    }
+
     // For use by unit test code only
     static synchronized void clearTLDOverrides() {
         inUse = false;
-        countryCodeTLDsPlus = EMPTY_STRING_ARRAY;
-        countryCodeTLDsMinus = EMPTY_STRING_ARRAY;
-        genericTLDsPlus = EMPTY_STRING_ARRAY;
-        genericTLDsMinus = EMPTY_STRING_ARRAY;
+        countryCodeTLDsPlus = MemoryReductionUtil.EMPTY_STRING_ARRAY;
+        countryCodeTLDsMinus = MemoryReductionUtil.EMPTY_STRING_ARRAY;
+        genericTLDsPlus = MemoryReductionUtil.EMPTY_STRING_ARRAY;
+        genericTLDsMinus = MemoryReductionUtil.EMPTY_STRING_ARRAY;
     }
     /**
      * Update one of the TLD override arrays.
@@ -1962,7 +1960,7 @@ public class DomainValidator implements Serializable {
      * @since 1.5.1
      */
     public static String [] getTLDEntries(DomainValidator.ArrayType table) {
-        final String array[];
+        final String[] array;
         switch(table) {
             case COUNTRY_CODE_MINUS:
                 array = countryCodeTLDsMinus;

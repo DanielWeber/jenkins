@@ -14,7 +14,6 @@ import jenkins.model.Jenkins.MasterComputer;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.logging.Logger;
@@ -53,7 +52,7 @@ public class JnlpSlaveRestarterInstaller extends ComputerListener implements Ser
 
     private static void install(Computer c, TaskListener listener) {
         try {
-            final List<SlaveRestarter> restarters = new ArrayList<SlaveRestarter>(SlaveRestarter.all());
+            final List<SlaveRestarter> restarters = new ArrayList<>(SlaveRestarter.all());
 
             VirtualChannel ch = c.getChannel();
             if (ch==null) return;  // defensive check
@@ -77,16 +76,12 @@ public class JnlpSlaveRestarterInstaller extends ComputerListener implements Ser
 
             try {
                 Engine.class.getMethod("addListener", EngineListener.class);
-            } catch (NoSuchMethodException _) {
+            } catch (NoSuchMethodException ignored) {
                 return null;    // running with older version of remoting that doesn't support adding listener
             }
 
             // filter out ones that doesn't apply
-            for (Iterator<SlaveRestarter> itr = restarters.iterator(); itr.hasNext(); ) {
-                SlaveRestarter r =  itr.next();
-                if (!r.canWork())
-                    itr.remove();
-            }
+            restarters.removeIf(r -> !r.canWork());
 
             e.addListener(new EngineListenerAdapter() {
                 @Override

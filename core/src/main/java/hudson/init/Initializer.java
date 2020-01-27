@@ -65,7 +65,7 @@ public @interface Initializer {
      *
      * <p>
      * This has the identical purpose as {@link #requires()}, but it's separated to allow better type-safety
-     * when using {@link InitMilestone} as a requirement (since enum member definitions need to be constant.)
+     * when using {@link InitMilestone} as a requirement (since enum member definitions need to be constant).
      */
     InitMilestone after() default STARTED;
 
@@ -92,7 +92,7 @@ public @interface Initializer {
     String[] attains() default {};
 
     /**
-     * Key in <tt>Messages.properties</tt> that represents what this task is about. Used for rendering the progress.
+     * Key in {@code Messages.properties} that represents what this task is about. Used for rendering the progress.
      * Defaults to "${short class name}.${method Name}".
      */
     String displayName() default "";

@@ -2,7 +2,6 @@ package hudson.model.queue;
 
 import hudson.model.Queue.BuildableItem;
 
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -15,7 +14,7 @@ import java.util.List;
 public abstract class AbstractQueueSorterImpl extends QueueSorter implements Comparator<BuildableItem> {
     @Override
     public void sortBuildableItems(List<BuildableItem> buildables) {
-        Collections.sort(buildables,this); // sort is ascending order
+        buildables.sort(this); // sort is ascending order
     }
 
     /**

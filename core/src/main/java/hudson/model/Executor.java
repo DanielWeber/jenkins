@@ -139,7 +139,7 @@ public class Executor extends Thread implements ModelObject {
      * Cause of interruption. Access needs to be synchronized.
      */
     @GuardedBy("lock")
-    private final List<CauseOfInterruption> causes = new Vector<CauseOfInterruption>();
+    private final List<CauseOfInterruption> causes = new Vector<>();
 
     public Executor(@Nonnull Computer owner, int n) {
         super("Executor #"+n+" for "+owner.getDisplayName());
@@ -271,7 +271,7 @@ public class Executor extends Thread implements ModelObject {
         lock.writeLock().lock();
         try {
             if (causes.isEmpty())   return;
-            r = new ArrayList<CauseOfInterruption>(causes);
+            r = new ArrayList<>(causes);
             causes.clear();
         } finally {
             lock.writeLock().unlock();
@@ -338,9 +338,7 @@ public class Executor extends Thread implements ModelObject {
             lock.writeLock().unlock();
         }
 
-        ACL.impersonate(ACL.SYSTEM);
-
-        try {
+        try (ACLContext ctx = ACL.as(ACL.SYSTEM)) {
             SubTask task;
             // transition from idle to building.
             // perform this state change as an atomic operation wrt other queue operations
@@ -578,7 +576,7 @@ public class Executor extends Thread implements ModelObject {
     }
 
     /**
-     * Same as {@link #getName()}.
+     * Human readable name of the Jenkins executor. For the Java thread name use {@link #getName()}.
      */
     public String getDisplayName() {
         return "Executor #"+getNumber();
@@ -767,7 +765,7 @@ public class Executor extends Thread implements ModelObject {
      *      string like "3 minutes" "1 day" etc.
      */
     public String getTimestampString() {
-        return Util.getPastTimeString(getElapsedTime());
+        return Util.getTimeSpanString(getElapsedTime());
     }
 
     /**
@@ -961,7 +959,7 @@ public class Executor extends Thread implements ModelObject {
      * Mechanism to allow threads (in particular the channel request handling threads) to
      * run on behalf of {@link Executor}.
      */
-    private static final ThreadLocal<Executor> IMPERSONATION = new ThreadLocal<Executor>();
+    private static final ThreadLocal<Executor> IMPERSONATION = new ThreadLocal<>();
 
     private static final Logger LOGGER = Logger.getLogger(Executor.class.getName());
 }

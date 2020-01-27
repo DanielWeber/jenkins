@@ -29,7 +29,6 @@ import hudson.model.FreeStyleProject;
 import hudson.model.Item;
 import hudson.model.Job;
 import hudson.model.Result;
-import hudson.model.Run;
 import hudson.model.labels.LabelAtom;
 import hudson.tasks.BatchFile;
 import hudson.tasks.Shell;
@@ -38,17 +37,14 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
-
-import java.io.IOException;
+import org.jvnet.hudson.test.Issue;
 
 import static hudson.cli.CLICommandInvoker.Matcher.failedWith;
 import static hudson.cli.CLICommandInvoker.Matcher.hasNoStandardOutput;
 import static hudson.cli.CLICommandInvoker.Matcher.succeeded;
-import static hudson.cli.CLICommandInvoker.Matcher.succeededSilently;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.fail;
 
@@ -80,18 +76,23 @@ public class ConsoleCommandTest {
         assertThat(result, hasNoStandardOutput());
         assertThat(result.stderr(), containsString("ERROR: No such job 'aProject'"));
     }
-
-    @Test public void consoleShouldFailWithoutItemBuildPermission() throws Exception {
-
-        j.createFreeStyleProject("aProject");
-
-        final CLICommandInvoker.Result result = command
-                .authorizedTo(Jenkins.READ, Job.READ)
-                .invokeWithArgs("aProject");
-
-        assertThat(result, failedWith(6));
-        assertThat(result, hasNoStandardOutput());
-        assertThat(result.stderr(), containsString("ERROR: user is missing the Job/Build permission"));
+    
+    @Issue("JENKINS-52181")
+    @Test public void consoleShouldBeAccessibleForUserWithRead() throws Exception {	
+        FreeStyleProject project = j.createFreeStyleProject("aProject");	
+        if (Functions.isWindows()) {
+            project.getBuildersList().add(new BatchFile("echo 1"));
+        } else {
+            project.getBuildersList().add(new Shell("echo 1"));
+        }
+        assertThat(project.scheduleBuild2(0).get().getLog(), containsString("echo 1"));
+        
+        final CLICommandInvoker.Result result = command	
+                .authorizedTo(Jenkins.READ, Job.READ)	
+                .invokeWithArgs("aProject");	
+        
+        assertThat(result, succeeded());
+        assertThat(result.stdout(), containsString("echo 1"));	
     }
 
     @Test public void consoleShouldFailWhenProjectDoesNotExist() throws Exception {

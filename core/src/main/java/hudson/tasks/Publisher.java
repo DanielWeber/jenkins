@@ -26,7 +26,9 @@ package hudson.tasks;
 import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.ExtensionComponent;
+import hudson.Launcher;
 import hudson.model.Action;
+import hudson.model.AbstractBuild;
 import hudson.model.Build;
 import hudson.model.BuildListener;
 import hudson.model.Describable;
@@ -36,7 +38,6 @@ import jenkins.model.Jenkins;
 
 import java.util.List;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 
 /**
@@ -119,7 +120,7 @@ public abstract class Publisher extends BuildStepCompatibilityLayer implements D
     }
 
     public Descriptor<Publisher> getDescriptor() {
-        return Jenkins.getInstance().getDescriptorOrDie(getClass());
+        return Jenkins.get().getDescriptorOrDie(getClass());
     }
 
     /**
@@ -135,8 +136,8 @@ public abstract class Publisher extends BuildStepCompatibilityLayer implements D
 
         @Override
         protected List<ExtensionComponent<Descriptor<Publisher>>> sort(List<ExtensionComponent<Descriptor<Publisher>>> r) {
-            List<ExtensionComponent<Descriptor<Publisher>>> copy = new ArrayList<ExtensionComponent<Descriptor<Publisher>>>(r);
-            Collections.sort(copy,this);
+            List<ExtensionComponent<Descriptor<Publisher>>> copy = new ArrayList<>(r);
+            copy.sort(this);
             return copy;
         }
 
@@ -168,6 +169,6 @@ public abstract class Publisher extends BuildStepCompatibilityLayer implements D
      */
     // for backward compatibility, the signature is not BuildStepDescriptor
     public static DescriptorExtensionList<Publisher,Descriptor<Publisher>> all() {
-        return Jenkins.getInstance().<Publisher,Descriptor<Publisher>>getDescriptorList(Publisher.class);
+        return Jenkins.get().getDescriptorList(Publisher.class);
     }
 }

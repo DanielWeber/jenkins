@@ -34,6 +34,7 @@ import javax.annotation.Nonnull;
 
 import jenkins.model.Jenkins;
 import jenkins.slaves.RemotingWorkDirSettings;
+import jenkins.util.java.JavaUtils;
 import org.jenkinsci.Symbol;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -41,7 +42,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 
 /**
- * {@link ComputerLauncher} via JNLP.
+ * {@link ComputerLauncher} via inbound connections.
  *
  * @author Stephen Connolly
  * @author Kohsuke Kawaguchi
@@ -151,6 +152,7 @@ public class JNLPLauncher extends ComputerLauncher {
      * @deprecated as of 1.XXX
      *      Use {@link Jenkins#getDescriptor(Class)}
      */
+    @Deprecated
     public static /*almost final*/ Descriptor<ComputerLauncher> DESCRIPTOR;
 
     /**
@@ -194,7 +196,7 @@ public class JNLPLauncher extends ComputerLauncher {
             // Causes JENKINS-45895 in the case of includes otherwise
             return DescriptorImpl.class.equals(getClass());
         }
-    };
+    }
 
     /**
      * Hides the JNLP launcher when the JNLP agent port is not enabled.
@@ -204,21 +206,30 @@ public class JNLPLauncher extends ComputerLauncher {
     @Extension
     public static class DescriptorVisibilityFilterImpl extends DescriptorVisibilityFilter {
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public boolean filter(@CheckForNull Object context, @Nonnull Descriptor descriptor) {
-            return descriptor.clazz != JNLPLauncher.class || Jenkins.getInstance().getTcpSlaveAgentListener() != null;
+            return descriptor.clazz != JNLPLauncher.class || Jenkins.get().getTcpSlaveAgentListener() != null;
         }
 
-        /**
-         * {@inheritDoc}
-         */
         @Override
         public boolean filterType(@Nonnull Class<?> contextClass, @Nonnull Descriptor descriptor) {
-            return descriptor.clazz != JNLPLauncher.class || Jenkins.getInstance().getTcpSlaveAgentListener() != null;
+            return descriptor.clazz != JNLPLauncher.class || Jenkins.get().getTcpSlaveAgentListener() != null;
         }
     }
 
+    /**
+     * Returns true if Java Web Start button should be displayed.
+     * Java Web Start is only supported when the Jenkins server is
+     * running with Java 8.  Earlier Java versions are not supported by Jenkins.
+     * Later Java versions do not support Java Web Start.
+     *
+     * This flag is checked in {@code config.jelly} before displaying the
+     * Java Web Start button.
+     * @return {@code true} if Java Web Start button should be displayed.
+     * @since FIXME
+     */
+    @Restricted(NoExternalUse.class) // Jelly use
+    public boolean isJavaWebStartSupported() {
+        return JavaUtils.isRunningWithJava8OrBelow();
+    }
 }

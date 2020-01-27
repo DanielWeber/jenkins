@@ -15,10 +15,9 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
+import static org.junit.Assert.*;
+import org.jvnet.hudson.test.Issue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -35,7 +34,7 @@ public class PluginWrapperTest {
         PluginWrapper.Dependency dependency = new PluginWrapper.Dependency(version);
         assertEquals("plugin", dependency.shortName);
         assertEquals("0.0.2", dependency.version);
-        assertEquals(false, dependency.optional);
+        assertFalse(dependency.optional);
     }
 
     @Test
@@ -44,7 +43,7 @@ public class PluginWrapperTest {
         PluginWrapper.Dependency dependency = new PluginWrapper.Dependency(version);
         assertEquals("plugin", dependency.shortName);
         assertEquals("0.0.2", dependency.version);
-        assertEquals(true, dependency.optional);
+        assertTrue(dependency.optional);
     }
 
     @Test
@@ -54,7 +53,7 @@ public class PluginWrapperTest {
             pw.resolvePluginDependencies();
             fail();
         } catch (IOException ex) {
-            assertContains(ex, "fake v42 failed to load", "update Jenkins from v2.0 to v3.0");
+            assertContains(ex, "fake version 42 failed to load", "update Jenkins from version 2.0 to version 3.0");
         }
     }
 
@@ -65,7 +64,7 @@ public class PluginWrapperTest {
             pw.resolvePluginDependencies();
             fail();
         } catch (IOException ex) {
-            assertContains(ex, "dependee v42 failed to load", "dependency v42 is missing. To fix, install v42 or later");
+            assertContains(ex, "dependee version 42 failed to load", "dependency version 42 is missing. To fix, install version 42 or later");
         }
     }
 
@@ -77,7 +76,7 @@ public class PluginWrapperTest {
             pw.resolvePluginDependencies();
             fail();
         } catch (IOException ex) {
-            assertContains(ex, "dependee v42 failed to load", "dependency v3 is older than required. To fix, install v5 or later");
+            assertContains(ex, "dependee version 42 failed to load", "dependency version 3 is older than required. To fix, install version 5 or later");
         }
     }
 
@@ -89,7 +88,7 @@ public class PluginWrapperTest {
             pw.resolvePluginDependencies();
             fail();
         } catch (IOException ex) {
-            assertContains(ex, "dependee v42 failed to load", "dependency v5 failed to load. Fix this plugin first");
+            assertContains(ex, "dependee version 42 failed to load", "dependency version 5 failed to load. Fix this plugin first");
         }
     }
 
@@ -162,12 +161,11 @@ public class PluginWrapperTest {
         }
 
         private PluginWrapper build() {
-            Manifest manifest = mock(Manifest.class);
-            Attributes attributes = new Attributes();
+            Manifest manifest = new Manifest();
+            Attributes attributes = manifest.getMainAttributes();
             attributes.put(new Attributes.Name("Short-Name"), name);
             attributes.put(new Attributes.Name("Jenkins-Version"), requiredCoreVersion);
             attributes.put(new Attributes.Name("Plugin-Version"), version);
-            when(manifest.getMainAttributes()).thenReturn(attributes);
             return new PluginWrapper(
                     pm,
                     new File("/tmp/" + name + ".jpi"),
@@ -180,4 +178,16 @@ public class PluginWrapperTest {
             );
         }
     }
+
+    @Issue("JENKINS-52665")
+    @Test
+    public void isSnapshot() {
+        assertFalse(PluginWrapper.isSnapshot("1.0"));
+        assertFalse(PluginWrapper.isSnapshot("1.0-alpha-1"));
+        assertFalse(PluginWrapper.isSnapshot("1.0-rc9999.abc123def456"));
+        assertTrue(PluginWrapper.isSnapshot("1.0-SNAPSHOT"));
+        assertTrue(PluginWrapper.isSnapshot("1.0-20180719.153600-1"));
+        assertTrue(PluginWrapper.isSnapshot("1.0-SNAPSHOT (private-abcd1234-jqhacker)"));
+    }
+
 }

@@ -33,6 +33,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.jvnet.hudson.test.Issue;
 import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
@@ -40,6 +41,7 @@ import org.powermock.modules.junit4.PowerMockRunner;
  * @author Ignacio Albors
  */
 @RunWith(PowerMockRunner.class)
+@PowerMockIgnore({"com.sun.org.apache.xerces.*", "javax.xml.*", "org.xml.*"})
 public class RunListTest {
 
 	// RunList for byTimestamp tests
@@ -56,7 +58,7 @@ public class RunListTest {
 		when(r1.getTimeInMillis()).thenReturn(200L);
 		when(r2.getTimeInMillis()).thenReturn(300L);
 
-		ArrayList<Run> list = new ArrayList<Run>();
+		ArrayList<Run> list = new ArrayList<>();
 		list.add(r2);
 		list.add(r1);
 

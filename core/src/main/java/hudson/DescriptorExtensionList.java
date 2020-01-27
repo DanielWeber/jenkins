@@ -73,10 +73,10 @@ public class DescriptorExtensionList<T extends Describable<T>, D extends Descrip
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static <T extends Describable<T>,D extends Descriptor<T>>
     DescriptorExtensionList<T,D> createDescriptorList(Jenkins jenkins, Class<T> describableType) {
-        if (describableType == (Class) Publisher.class) {
+        if (describableType == Publisher.class) {
             return (DescriptorExtensionList) new Publisher.DescriptorExtensionListImpl(jenkins);
         }
-        return new DescriptorExtensionList<T,D>(jenkins,describableType);
+        return new DescriptorExtensionList<>(jenkins, describableType);
     }
 
     /**
@@ -115,6 +115,7 @@ public class DescriptorExtensionList<T extends Describable<T>, D extends Descrip
      *      Fully qualified name of the descriptor, not the describable.
      * @deprecated {@link Descriptor#getId} is supposed to be used for new code, not the descriptor class name.
      */
+    @Deprecated
     public D find(String fqcn) {
         return Descriptor.find(this,fqcn);
     }
@@ -161,13 +162,13 @@ public class DescriptorExtensionList<T extends Describable<T>, D extends Descrip
     @Override
     public boolean add(D d) {
         boolean r = super.add(d);
-        hudson.getExtensionList(Descriptor.class).add(d);
+        getDescriptorExtensionList().add(d);
         return r;
     }
 
     @Override
     public boolean remove(Object o) {
-        hudson.getExtensionList(Descriptor.class).remove(o);
+        getDescriptorExtensionList().remove(o);
         return super.remove(o);
     }
 
@@ -176,7 +177,8 @@ public class DescriptorExtensionList<T extends Describable<T>, D extends Descrip
      */
     @Override
     protected Object getLoadLock() {
-        return this;
+        // Get a lock for the singleton extension list to prevent deadlocks (JENKINS-55361)
+        return getDescriptorExtensionList().getLoadLock();
     }
 
     /**
@@ -189,7 +191,7 @@ public class DescriptorExtensionList<T extends Describable<T>, D extends Descrip
             LOGGER.log(Level.WARNING, "Cannot load extension components, because Jenkins instance has not been assigned yet");
             return Collections.emptyList();
         }
-        return _load(jenkins.getExtensionList(Descriptor.class).getComponents());
+        return _load(getDescriptorExtensionList().getComponents());
     }
 
     @Override
@@ -198,7 +200,7 @@ public class DescriptorExtensionList<T extends Describable<T>, D extends Descrip
     }
 
     private List<ExtensionComponent<D>> _load(Iterable<ExtensionComponent<Descriptor>> set) {
-        List<ExtensionComponent<D>> r = new ArrayList<ExtensionComponent<D>>();
+        List<ExtensionComponent<D>> r = new ArrayList<>();
         for( ExtensionComponent<Descriptor> c : set ) {
             Descriptor d = c.getInstance();
             try {
@@ -209,6 +211,10 @@ public class DescriptorExtensionList<T extends Describable<T>, D extends Descrip
             }
         }
         return r;
+    }
+
+    private ExtensionList<Descriptor> getDescriptorExtensionList() {
+        return ExtensionList.lookup(Descriptor.class);
     }
 
     /**

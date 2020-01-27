@@ -61,13 +61,12 @@ public class DisconnectNodeCommand extends CLICommand {
         boolean errorOccurred = false;
         final Jenkins jenkins = Jenkins.getActiveInstance();
 
-        final HashSet<String> hs = new HashSet<String>();
-        hs.addAll(nodes);
+        final HashSet<String> hs = new HashSet<>(nodes);
 
         List<String> names = null;
 
         for (String node_s : hs) {
-            Computer computer = null;
+            Computer computer;
 
             try {
                 computer = jenkins.getComputer(node_s);
@@ -88,7 +87,7 @@ public class DisconnectNodeCommand extends CLICommand {
                     throw e;
                 }
 
-                stderr.println(String.format(node_s + ": " + e.getMessage()));
+                stderr.println(node_s + ": " + e.getMessage());
                 errorOccurred = true;
                 continue;
             }

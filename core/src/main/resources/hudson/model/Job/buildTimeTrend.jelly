@@ -35,7 +35,7 @@ THE SOFTWARE.
 
       <h1>${%Build Time Trend}</h1>
           <div align="center">
-            <img src="buildTimeGraph/png" width="500" height="400" lazymap="buildTimeGraph/map" alt="[Build time graph]" style="float:right"/>
+            <img src="buildTimeGraph/png" width="500" height="400" lazymap="buildTimeGraph/map" alt="[${%Build time graph}]" style="float:right"/>
           </div>
 
           <j:set var="isMasterSlaveEnabled" value="${!empty(app.slaves)}"/>
@@ -47,7 +47,8 @@ THE SOFTWARE.
                         var e = data[x];
                         var tr = new Element('tr');
                         tr.insert(new Element('td', {data: e.iconColorOrdinal}).
-                            insert(new Element('img', {width: 16, height: 16, src: '${imagesURL}/16x16/' + e.buildStatusUrl, alt: e.iconColorDescription})));
+                            insert(new Element('a', {href: e.number + '/console'}).
+                                insert(new Element('img', {width: 16, height: 16, src: '${imagesURL}/16x16/' + e.buildStatusUrl, alt: e.iconColorDescription}))));
                         tr.insert(new Element('td', {data: e.number}).
                             insert(new Element('a', {href: e.number + '/', 'class': 'model-link inside'}).
                                 update(e.displayName.escapeHTML())));

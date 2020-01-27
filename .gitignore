@@ -1,5 +1,4 @@
 target
-.flattened-pom.xml
 work
 
 # IntelliJ project files 
@@ -14,6 +13,9 @@ out
 .classpath
 .project
 build
+
+# VSCode workspace file
+*.code-workspace
 
 # vim
 *~

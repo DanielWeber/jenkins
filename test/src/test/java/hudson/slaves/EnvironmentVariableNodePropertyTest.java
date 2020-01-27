@@ -1,7 +1,5 @@
 package hudson.slaves;
 
-import static org.junit.Assert.assertEquals;
-
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import hudson.model.Node;
@@ -22,7 +20,7 @@ import com.gargoylesoftware.htmlunit.html.HtmlPage;
 
 /**
  * This class tests that environment variables from node properties are applied,
- * and that the priority is maintained: parameters > slave node properties >
+ * and that the priority is maintained: parameters > agent node properties >
  * master node properties
  */
 public class EnvironmentVariableNodePropertyTest extends HudsonTestCase {
@@ -31,7 +29,7 @@ public class EnvironmentVariableNodePropertyTest extends HudsonTestCase {
 	private FreeStyleProject project;
 
 	/**
-	 * Slave properties are available
+	 * Agent properties are available
 	 */
 	public void testSlavePropertyOnSlave() throws Exception {
 		setVariables(slave, new Entry("KEY", "slaveValue"));
@@ -53,7 +51,7 @@ public class EnvironmentVariableNodePropertyTest extends HudsonTestCase {
 	}
 
 	/**
-	 * Both slave and master properties are available, but slave properties have priority
+	 * Both agent and master properties are available, but agent properties have priority
 	 */
 	public void testSlaveAndMasterPropertyOnSlave() throws Exception {
         jenkins.getGlobalNodeProperties().replaceBy(
@@ -67,8 +65,8 @@ public class EnvironmentVariableNodePropertyTest extends HudsonTestCase {
 	}
 
 	/**
-	 * Slave and master properties and parameters are available.
-	 * Priority: parameters > slave > master
+	 * Agent and master properties and parameters are available.
+	 * Priority: parameters > agent > master
 	 * @throws Exception
 	 */
 	public void testSlaveAndMasterPropertyAndParameterOnSlave()

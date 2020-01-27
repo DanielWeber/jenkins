@@ -1,11 +1,11 @@
 package jenkins.security;
 
 import hudson.security.ACL;
+import hudson.security.ACLContext;
 import hudson.security.SecurityRealm;
 import hudson.util.Scrambler;
 import org.acegisecurity.Authentication;
 import org.acegisecurity.BadCredentialsException;
-import org.acegisecurity.context.SecurityContext;
 import org.acegisecurity.context.SecurityContextHolder;
 import org.acegisecurity.providers.UsernamePasswordAuthenticationToken;
 import org.acegisecurity.providers.anonymous.AnonymousAuthenticationToken;
@@ -29,7 +29,7 @@ import java.util.logging.Logger;
 import static java.util.logging.Level.*;
 
 /**
- * Takes "username:password" given in the <tt>Authorization</tt> HTTP header and authenticates
+ * Takes "username:password" given in the {@code Authorization} HTTP header and authenticates
  * the request.
  *
  * <p>
@@ -135,11 +135,8 @@ public class BasicHeaderProcessor implements Filter {
     protected void success(HttpServletRequest req, HttpServletResponse rsp, FilterChain chain, Authentication auth) throws IOException, ServletException {
         rememberMeServices.loginSuccess(req, rsp, auth);
 
-        SecurityContext old = ACL.impersonate(auth);
-        try {
+        try (ACLContext ctx = ACL.as(auth)){
             chain.doFilter(req,rsp);
-        } finally {
-            SecurityContextHolder.setContext(old);
         }
     }
 

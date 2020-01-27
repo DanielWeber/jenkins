@@ -8,8 +8,6 @@ import static org.junit.Assert.fail;
 import static org.powermock.api.mockito.PowerMockito.mock;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.when;
-import hudson.model.Item;
-import hudson.model.ItemGroup;
 import hudson.model.TopLevelItem;
 import hudson.model.ViewTest.CompositeView;
 import hudson.model.View;
@@ -23,21 +21,21 @@ import java.util.List;
 
 
 import jenkins.model.Jenkins;
-import jenkins.model.ModifiableTopLevelItemGroup;
 
 import org.hamcrest.Description;
 import org.hamcrest.TypeSafeMatcher;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.core.classloader.annotations.SuppressStaticInitializationFor;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest(Jenkins.class)
+@PowerMockIgnore({"com.sun.org.apache.xerces.*", "javax.xml.*", "org.xml.*"})
 @SuppressStaticInitializationFor("hudson.cli.CLICommand")
 public class ListJobsCommandTest {
 
@@ -51,7 +49,7 @@ public class ListJobsCommandTest {
 
         jenkins = mock(Jenkins.class);
         mockStatic(Jenkins.class);
-        when(Jenkins.getInstance()).thenReturn(jenkins);
+        when(Jenkins.get()).thenReturn(jenkins);
         when(Jenkins.getActiveInstance()).thenReturn(jenkins);
         command = mock(ListJobsCommand.class, Mockito.CALLS_REAL_METHODS);
         command.stdout = new PrintStream(stdout);
@@ -71,54 +69,6 @@ public class ListJobsCommandTest {
             assertThat(e.getMessage(), containsString("No view or item group with the given name 'NoSuchViewOrItemGroup' found."));
         }
         assertThat(stdout, is(empty()));
-    }
-
-    /*
-    @Test
-    @Issue("JENKINS-18393")
-    public void failForMatrixProject() throws Exception {
-
-        final MatrixProject matrix = mock(MatrixProject.class);
-        final MatrixConfiguration config = mock(MatrixConfiguration.class);
-        when(matrix.getItems()).thenReturn(Arrays.asList(config));
-
-        when(jenkins.getView("MatrixJob")).thenReturn(null);
-        when(jenkins.getItemByFullName("MatrixJob")).thenReturn(matrix);
-
-        assertThat(runWith("MatrixJob"), equalTo(-1));
-        assertThat(stdout, is(empty()));
-        assertThat(stderr.toString(), containsString("No view or item group with the given name found"));
-    }
-    */
-
-    @Ignore("TODO enable when you figure out why ListJobsCommandTest$1Folder$$EnhancerByMockitoWithCGLIB$$f124784a calls ReturnsEmptyValues, or just use MockFolder and move to the test module with JenkinsRule")
-    @Test
-    public void getAllJobsFromFolders() throws Exception {
-
-        abstract class Folder implements ModifiableTopLevelItemGroup, TopLevelItem {
-        }
-
-        final Folder folder = mock(Folder.class);
-        final Folder nestedFolder = mock(Folder.class);
-        when(folder.getDisplayName()).thenReturn("Folder");
-        when(nestedFolder.getDisplayName()).thenReturn("NestedFolder");
-
-        final TopLevelItem job = job("job");
-        final TopLevelItem nestedJob = job("nestedJob");
-        when(job.hasPermission(Item.READ)).thenReturn(true);
-        when(nestedJob.hasPermission(Item.READ)).thenReturn(true);
-        when(job.getRelativeNameFrom((ItemGroup<TopLevelItem>) folder)).thenReturn("job");
-        when(nestedJob.getRelativeNameFrom((ItemGroup<TopLevelItem>) folder)).thenReturn("nestedJob");
-
-        when(folder.getItems()).thenReturn(Arrays.asList(nestedFolder, job));
-        when(nestedFolder.getItems()).thenReturn(Arrays.asList(nestedJob));
-
-        when(jenkins.getView("OuterFolder")).thenReturn(null);
-        when(jenkins.getItemByFullName("OuterFolder")).thenReturn(folder);
-
-        assertThat(runWith("OuterFolder"), equalTo(0));
-        assertThat(stdout, listsJobs("job", "nestedJob"));
-        assertThat(stderr, is(empty()));
     }
 
     @Test
@@ -228,11 +178,11 @@ public class ListJobsCommandTest {
             @Override
             protected boolean matchesSafely(ByteArrayOutputStream item) {
 
-                final HashSet<String> jobs = new HashSet<String>(
+                final HashSet<String> jobs = new HashSet<>(
                         Arrays.asList(item.toString().split(System.getProperty("line.separator")))
                 );
 
-                return new HashSet<String>(Arrays.asList(expected)).equals(jobs);
+                return new HashSet<>(Arrays.asList(expected)).equals(jobs);
             }
 
             @Override

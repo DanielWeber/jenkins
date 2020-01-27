@@ -1,8 +1,8 @@
 package hudson.model;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
@@ -17,10 +17,12 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 @RunWith(PowerMockRunner.class)
+@PowerMockIgnore({"com.sun.org.apache.xerces.*", "javax.xml.*", "org.xml.*"})
 public class ListViewTest {
     
     private interface ItemGroupOfNonTopLevelItem extends TopLevelItem, ItemGroup<Item> {}
@@ -38,7 +40,7 @@ public class ListViewTest {
         when(owner.getItemGroup()).thenReturn(itemGroupOwner);
         ListView lv = new ListView("test", owner);
         ItemGroupOfNonTopLevelItem ig = Mockito.mock(ItemGroupOfNonTopLevelItem.class);
-        when(Items.getAllItems(eq(itemGroupOwner), eq(TopLevelItem.class))).thenReturn(Arrays.asList((TopLevelItem) ig));
+        when(Items.getAllItems(eq(itemGroupOwner), eq(TopLevelItem.class))).thenReturn(Arrays.asList(ig));
         when(ig.getRelativeNameFrom(any(ItemGroup.class))).thenReturn("test-item");
         lv.setRecurse(true);
         lv.add(ig);
@@ -58,7 +60,7 @@ public class ListViewTest {
         ListView view = new ListView("test", owner);
         view.setIncludeRegex(".*");
         TopLevelItem it = Mockito.mock(TopLevelItem.class);
-        List<TopLevelItem> igContent = Arrays.asList((TopLevelItem) it);
+        List<TopLevelItem> igContent = Arrays.asList(it);
         when(Items.getAllItems(eq(ig), eq(TopLevelItem.class))).thenReturn(igContent);
         when(ig.getItems()).thenReturn(igContent);
         when(it.getRelativeNameFrom(any(ItemGroup.class))).thenReturn("test-item");

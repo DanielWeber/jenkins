@@ -1,6 +1,6 @@
 package hudson.slaves;
 
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.verifyStatic;
@@ -12,6 +12,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 import hudson.remoting.Channel;
@@ -21,11 +22,12 @@ import java.util.HashMap;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({ ChannelPinger.class })
+@PowerMockIgnore({"com.sun.org.apache.xerces.*", "javax.xml.*", "org.xml.*"})
 public class ChannelPingerTest {
 
     @Mock private Channel mockChannel;
 
-    private Map<String, String> savedSystemProperties = new HashMap<String, String>();
+    private Map<String, String> savedSystemProperties = new HashMap<>();
 
     @Before
     public void setUp() throws Exception {
@@ -63,7 +65,7 @@ public class ChannelPingerTest {
 
         verify(mockChannel).call(eq(new ChannelPinger.SetUpRemotePing(ChannelPinger.PING_TIMEOUT_SECONDS_DEFAULT,
                                                                       ChannelPinger.PING_INTERVAL_SECONDS_DEFAULT)));
-        verifyStatic();
+        verifyStatic(ChannelPinger.class);
         ChannelPinger.setUpPingForChannel(mockChannel, null, ChannelPinger.PING_TIMEOUT_SECONDS_DEFAULT,
                                           ChannelPinger.PING_INTERVAL_SECONDS_DEFAULT, true);
     }
@@ -77,7 +79,7 @@ public class ChannelPingerTest {
         channelPinger.install(mockChannel, null);
 
         verify(mockChannel).call(new ChannelPinger.SetUpRemotePing(42, 73));
-        verifyStatic();
+        verifyStatic(ChannelPinger.class);
         ChannelPinger.setUpPingForChannel(mockChannel, null, 42, 73, true);
     }
 
@@ -89,7 +91,7 @@ public class ChannelPingerTest {
         channelPinger.install(mockChannel, null);
 
         verify(mockChannel).call(eq(new ChannelPinger.SetUpRemotePing(ChannelPinger.PING_TIMEOUT_SECONDS_DEFAULT, 420)));
-        verifyStatic();
+        verifyStatic(ChannelPinger.class);
         ChannelPinger.setUpPingForChannel(mockChannel, null, ChannelPinger.PING_TIMEOUT_SECONDS_DEFAULT, 420, true);
     }
 
@@ -102,7 +104,7 @@ public class ChannelPingerTest {
         channelPinger.install(mockChannel, null);
 
         verify(mockChannel).call(eq(new ChannelPinger.SetUpRemotePing(ChannelPinger.PING_TIMEOUT_SECONDS_DEFAULT, 73)));
-        verifyStatic();
+        verifyStatic(ChannelPinger.class);
         ChannelPinger.setUpPingForChannel(mockChannel, null, ChannelPinger.PING_TIMEOUT_SECONDS_DEFAULT, 73, true);
     }
 

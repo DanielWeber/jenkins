@@ -1,8 +1,10 @@
 package hudson.node_monitors;
 
+import hudson.Functions;
 import hudson.model.Computer;
 import hudson.remoting.Callable;
 import hudson.remoting.VirtualChannel;
+import hudson.slaves.SlaveComputer;
 import jenkins.model.Jenkins;
 
 import javax.annotation.CheckForNull;
@@ -80,10 +82,10 @@ public abstract class AbstractAsyncNodeMonitorDescriptor<T> extends AbstractNode
      * Perform monitoring with detailed reporting.
      */
     protected final @Nonnull Result<T> monitorDetailed() throws InterruptedException {
-        Map<Computer,Future<T>> futures = new HashMap<Computer,Future<T>>();
+        Map<Computer,Future<T>> futures = new HashMap<>();
         Set<Computer> skipped = new HashSet<>();
 
-        for (Computer c : Jenkins.getInstance().getComputers()) {
+        for (Computer c : Jenkins.get().getComputers()) {
             try {
                 VirtualChannel ch = c.getChannel();
                 futures.put(c,null);    // sentinel value
@@ -92,17 +94,15 @@ public abstract class AbstractAsyncNodeMonitorDescriptor<T> extends AbstractNode
                     if (cc!=null)
                         futures.put(c,ch.callAsync(cc));
                 }
-            } catch (RuntimeException e) {
-                LOGGER.log(WARNING, "Failed to monitor "+c.getDisplayName()+" for "+getDisplayName(), e);
-            } catch (IOException e) {
-                LOGGER.log(WARNING, "Failed to monitor "+c.getDisplayName()+" for "+getDisplayName(), e);
+            } catch (RuntimeException | IOException e) {
+                error(c, e);
             }
         }
 
         final long now = System.currentTimeMillis();
         final long end = now + getMonitoringTimeOut();
 
-        final Map<Computer,T> data = new HashMap<Computer,T>();
+        final Map<Computer,T> data = new HashMap<>();
 
         for (Entry<Computer, Future<T>> e : futures.entrySet()) {
             Computer c = e.getKey();
@@ -112,12 +112,8 @@ public abstract class AbstractAsyncNodeMonitorDescriptor<T> extends AbstractNode
             if (f!=null) {
                 try {
                     data.put(c,f.get(Math.max(0,end-System.currentTimeMillis()), MILLISECONDS));
-                } catch (RuntimeException x) {
-                    LOGGER.log(WARNING, "Failed to monitor " + c.getDisplayName() + " for " + getDisplayName(), x);
-                } catch (ExecutionException x) {
-                    LOGGER.log(WARNING, "Failed to monitor " + c.getDisplayName() + " for " + getDisplayName(), x);
-                } catch (TimeoutException x) {
-                    LOGGER.log(WARNING, "Failed to monitor " + c.getDisplayName() + " for " + getDisplayName(), x);
+                } catch (RuntimeException | TimeoutException | ExecutionException x) {
+                    error(c, x);
                 }
             } else {
                 skipped.add(c);
@@ -127,6 +123,14 @@ public abstract class AbstractAsyncNodeMonitorDescriptor<T> extends AbstractNode
         return new Result<>(data, skipped);
     }
 
+    private void error(Computer c, Throwable x) {
+        if (c instanceof SlaveComputer) {
+            Functions.printStackTrace(x, ((SlaveComputer) c).getListener().error("Failed to monitor for " + getDisplayName()));
+        } else {
+            LOGGER.log(WARNING, "Failed to monitor " + c.getDisplayName() + " for " + getDisplayName(), x);
+        }
+    }
+
     private static final Logger LOGGER = Logger.getLogger(AbstractAsyncNodeMonitorDescriptor.class.getName());
 
     /**
@@ -134,16 +138,16 @@ public abstract class AbstractAsyncNodeMonitorDescriptor<T> extends AbstractNode
      * returned in the future.
      *
      * The {@link #getMonitoringData()} provides the results of the monitoring as {@link #monitor()} does. Note the value
-     * in the map can be <tt>null</tt> for several reasons:
+     * in the map can be {@code null} for several reasons:
      * <ul>
-     *     <li>The monitoring {@link Callable} returned <tt>null</tt> as a provisioning result.</li>
+     *     <li>The monitoring {@link Callable} returned {@code null} as a provisioning result.</li>
      *     <li>Creating or evaluating that callable has thrown an exception.</li>
      *     <li>The computer was not monitored as it was offline.</li>
      *     <li>The {@link AbstractAsyncNodeMonitorDescriptor#createCallable} has returned null.</li>
      * </ul>
      *
      * Clients can distinguishing among these states based on the additional data attached to this object. {@link #getSkipped()}
-     * returns computers that was not monitored as they ware either offline or monitor produced <tt>null</tt> {@link Callable}.
+     * returns computers that was not monitored as they ware either offline or monitor produced {@code null} {@link Callable}.
      */
     protected static final class Result<T> {
         private static final long serialVersionUID = -7671448355804481216L;
