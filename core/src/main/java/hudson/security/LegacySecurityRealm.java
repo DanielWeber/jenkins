@@ -98,6 +98,7 @@ public final class LegacySecurityRealm extends SecurityRealm implements Authenti
      * @deprecated as of 2.0
      *      Don't use this field, use injection.
      */
+    @Deprecated
     @Restricted(NoExternalUse.class)
     public static /*almost final*/ Descriptor<SecurityRealm> DESCRIPTOR;
 
@@ -110,5 +111,5 @@ public final class LegacySecurityRealm extends SecurityRealm implements Authenti
         public String getDisplayName() {
             return Messages.LegacySecurityRealm_Displayname();
         }
-    };
+    }
 }

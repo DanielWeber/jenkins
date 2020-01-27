@@ -163,10 +163,10 @@ public abstract class ComputerLauncher extends AbstractDescribableImpl<ComputerL
      *      {@link jenkins.model.Jenkins#getDescriptorList(Class)} for read access.
      */
     @Deprecated
-    public static final DescriptorList<ComputerLauncher> LIST = new DescriptorList<ComputerLauncher>(ComputerLauncher.class);
+    public static final DescriptorList<ComputerLauncher> LIST = new DescriptorList<>(ComputerLauncher.class);
 
     /**
-     * Given the output of "java -version" in <code>r</code>, determine if this
+     * Given the output of "java -version" in {@code r}, determine if this
      * version of Java is supported, or throw {@link IOException}.
      *
      * @param logger

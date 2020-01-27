@@ -29,7 +29,6 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.ExtensionPoint;
 import hudson.FeedAdapter;
-import hudson.FilePath;
 import hudson.PermalinkList;
 import hudson.Util;
 import hudson.cli.declarative.CLIResolver;
@@ -67,7 +66,6 @@ import java.awt.Color;
 import java.awt.Paint;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
@@ -117,6 +115,7 @@ import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.interceptor.RequirePOST;
+import org.kohsuke.stapler.verb.POST;
 
 import static javax.servlet.http.HttpServletResponse.SC_BAD_REQUEST;
 import static javax.servlet.http.HttpServletResponse.SC_NO_CONTENT;
@@ -161,6 +160,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
     private transient volatile boolean holdOffBuildUntilUserSave;
 
     /** @deprecated Replaced by {@link BuildDiscarderProperty} */
+    @Deprecated
     private volatile BuildDiscarder logRotator;
 
     /**
@@ -177,7 +177,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
      * List of properties configured for this project.
      */
     // this should have been DescribableList but now it's too late
-    protected CopyOnWriteList<JobProperty<? super JobT>> properties = new CopyOnWriteList<JobProperty<? super JobT>>();
+    protected CopyOnWriteList<JobProperty<? super JobT>> properties = new CopyOnWriteList<>();
 
     @Restricted(NoExternalUse.class)
     public transient RunIdMigrator runIdMigrator;
@@ -205,7 +205,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
 
         File buildDir = getBuildDir();
         runIdMigrator = new RunIdMigrator();
-        runIdMigrator.migrate(buildDir, Jenkins.getInstance().getRootDir());
+        runIdMigrator.migrate(buildDir, Jenkins.get().getRootDir());
 
         TextFile f = getNextBuildNumberFile();
         if (f.exists()) {
@@ -218,6 +218,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
                 }
             } catch (NumberFormatException e) {
                 LOGGER.log(Level.WARNING, "Corruption in {0}: {1}", new Object[] {f, e});
+                //noinspection StatementWithEmptyBody
                 if (this instanceof LazyBuildMixIn.LazyLoadingJob) {
                     // allow LazyBuildMixIn.onLoad to fix it
                 } else {
@@ -234,7 +235,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
         }
 
         if (properties == null) // didn't exist < 1.72
-            properties = new CopyOnWriteList<JobProperty<? super JobT>>();
+            properties = new CopyOnWriteList<>();
 
         for (JobProperty p : properties)
             p.setOwner(this);
@@ -597,14 +598,14 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
      * @see JobProperty#getJobOverrides
      */
     public Collection<?> getOverrides() {
-        List<Object> r = new ArrayList<Object>();
+        List<Object> r = new ArrayList<>();
         for (JobProperty<? super JobT> p : properties)
             r.addAll(p.getJobOverrides());
         return r;
     }
 
     public List<Widget> getWidgets() {
-        ArrayList<Widget> r = new ArrayList<Widget>();
+        ArrayList<Widget> r = new ArrayList<>();
         r.add(createHistoryWidget());
         return r;
     }
@@ -664,7 +665,6 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
 
     @Override
     public void movedTo(DirectlyModifiableTopLevelItemGroup destination, AbstractItem newItem, File destDir) throws IOException {
-        Job newJob = (Job) newItem; // Missing covariant parameters type here.
         File oldBuildDir = getBuildDir();
         super.movedTo(destination, newItem, destDir);
         File newBuildDir = getBuildDir();
@@ -683,7 +683,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
     public static class SubItemBuildsLocationImpl extends ItemListener {
         @Override
         public void onLocationChanged(Item item, String oldFullName, String newFullName) {
-            final Jenkins jenkins = Jenkins.getInstance();
+            final Jenkins jenkins = Jenkins.get();
             if (!jenkins.isDefaultBuildDir() && item instanceof Job) {
                 File newBuildDir = ((Job)item).getBuildDir();
                 try {
@@ -726,7 +726,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
     @Exported(name="allBuilds",visibility=-2)
     @WithBridgeMethods(List.class)
     public RunList<RunT> getBuilds() {
-        return RunList.<RunT>fromRuns(_getRuns().values());
+        return RunList.fromRuns(_getRuns().values());
     }
 
     /**
@@ -743,7 +743,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
      * Obtains all the {@link Run}s whose build numbers matches the given {@link RangeSet}.
      */
     public synchronized List<RunT> getBuilds(RangeSet rs) {
-        List<RunT> builds = new LinkedList<RunT>();
+        List<RunT> builds = new LinkedList<>();
 
         for (Range r : rs.getRanges()) {
             for (RunT b = getNearestBuild(r.start); b!=null && b.getNumber()<r.end; b=b.getNextBuild()) {
@@ -758,7 +758,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
      * Gets all the builds in a map.
      */
     public SortedMap<Integer, RunT> getBuildsAsMap() {
-        return Collections.<Integer, RunT>unmodifiableSortedMap(_getRuns());
+        return Collections.unmodifiableSortedMap(_getRuns());
     }
 
     /**
@@ -811,7 +811,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
     }
 
     /**
-     * Gets the youngest build #m that satisfies <tt>n&lt;=m</tt>.
+     * Gets the youngest build #m that satisfies {@code n&lt;=m}.
      * 
      * This is useful when you'd like to fetch a build but the exact build might
      * be already gone (deleted, rotated, etc.)
@@ -826,7 +826,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
     }
 
     /**
-     * Gets the latest build #m that satisfies <tt>m&lt;=n</tt>.
+     * Gets the latest build #m that satisfies {@code m&lt;=n}.
      * 
      * This is useful when you'd like to fetch a build but the exact build might
      * be already gone (deleted, rotated, etc.)
@@ -985,10 +985,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
     @Exported
     @QuickSilver
     public RunT getLastCompletedBuild() {
-        RunT r = getLastBuild();
-        while (r != null && r.isBuilding())
-            r = r.getPreviousBuild();
-        return r;
+        return (RunT)Permalink.LAST_COMPLETED_BUILD.resolve(this);
     }
     
     /**
@@ -998,19 +995,8 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
      *   if not enough builds satisfying the threshold have been found. Never null.
      */
     public List<RunT> getLastBuildsOverThreshold(int numberOfBuilds, Result threshold) {
-        
-        List<RunT> result = new ArrayList<RunT>(numberOfBuilds);
-        
         RunT r = getLastBuild();
-        while (r != null && result.size() < numberOfBuilds) {
-            if (!r.isBuilding() && 
-                 (r.getResult() != null && r.getResult().isBetterOrEqualTo(threshold))) {
-                result.add(r);
-            }
-            r = r.getPreviousBuild();
-        }
-        
-        return result;
+        return r.getBuildsOverThreshold(numberOfBuilds, threshold);
     }
     
     /**
@@ -1023,7 +1009,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
      */
     @SuppressWarnings("unchecked")
     protected List<RunT> getEstimatedDurationCandidates() {
-        List<RunT> candidates = new ArrayList<RunT>(3);
+        List<RunT> candidates = new ArrayList<>(3);
         RunT lastSuccessful = getLastSuccessfulBuild();
         int lastSuccessfulNumber = -1;
         if (lastSuccessful != null) {
@@ -1033,7 +1019,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
 
         int i = 0;
         RunT r = getLastBuild();
-        List<RunT> fallbackCandidates = new ArrayList<RunT>(3);
+        List<RunT> fallbackCandidates = new ArrayList<>(3);
         while (r != null && candidates.size() < 3 && i < 6) {
             if (!r.isBuilding() && r.getResult() != null && r.getNumber() != lastSuccessfulNumber) {
                 Result result = r.getResult();
@@ -1105,7 +1091,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
             }
         }
 
-        List<FeedItem> entries = new ArrayList<FeedItem>();
+        List<FeedItem> entries = new ArrayList<>();
         String scmDisplayName = "";
         if (this instanceof SCMTriggerItem) {
             SCMTriggerItem scmItem = (SCMTriggerItem) this;
@@ -1201,7 +1187,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
 
     @Exported(name = "healthReport")
     public List<HealthReport> getBuildHealthReports() {
-        List<HealthReport> reports = new ArrayList<HealthReport>();
+        List<HealthReport> reports = new ArrayList<>();
         RunT lastBuild = getLastBuild();
 
         if (lastBuild != null && lastBuild.isBuilding()) {
@@ -1214,7 +1200,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
         if (cachedBuildHealthReportsBuildNumber != null
                 && cachedBuildHealthReports != null
                 && lastBuild != null
-                && cachedBuildHealthReportsBuildNumber.intValue() == lastBuild
+                && cachedBuildHealthReportsBuildNumber == lastBuild
                         .getNumber()) {
             reports.addAll(cachedBuildHealthReports);
         } else if (lastBuild != null) {
@@ -1243,7 +1229,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
 
             // store the cache
             cachedBuildHealthReportsBuildNumber = lastBuild.getNumber();
-            cachedBuildHealthReports = new ArrayList<HealthReport>(reports);
+            cachedBuildHealthReports = new ArrayList<>(reports);
         }
 
         return reports;
@@ -1319,7 +1305,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
     /**
      * Accepts submission from the configuration page.
      */
-    @RequirePOST
+    @POST
     public synchronized void doConfigSubmit(StaplerRequest req,
             StaplerResponse rsp) throws IOException, ServletException, FormException {
         checkPermission(CONFIGURE);
@@ -1334,7 +1320,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
 
                 logRotator = null;
 
-                DescribableList<JobProperty<?>, JobPropertyDescriptor> t = new DescribableList<JobProperty<?>, JobPropertyDescriptor>(NOOP,getAllProperties());
+                DescribableList<JobProperty<?>, JobPropertyDescriptor> t = new DescribableList<>(NOOP, getAllProperties());
                 JSONObject jsonProperties = json.optJSONObject("properties");
                 if (jsonProperties != null) {
                   t.rebuild(req,jsonProperties,JobPropertyDescriptor.getPropertyDescriptors(Job.this.getClass()));
@@ -1352,7 +1338,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
             }
             ItemListener.fireOnUpdated(this);
 
-            final ProjectNamingStrategy namingStrategy = Jenkins.getInstance().getProjectNamingStrategy();
+            final ProjectNamingStrategy namingStrategy = Jenkins.get().getProjectNamingStrategy();
                 if(namingStrategy.isForceExistingJobs()){
                     namingStrategy.checkName(name);
                 }
@@ -1471,7 +1457,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
 
                 }
 
-                DataSetBuilder<String, ChartLabel> data = new DataSetBuilder<String, ChartLabel>();
+                DataSetBuilder<String, ChartLabel> data = new DataSetBuilder<>();
                 for (Run r : getNewBuilds()) {
                     if (r.isBuilding())
                         continue;
@@ -1571,9 +1557,6 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
         doConfirmRename(newName).generateResponse(req, rsp, null);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     protected void checkRename(String newName) throws Failure {
         if (isBuilding()) {
@@ -1604,7 +1587,7 @@ public abstract class Job<JobT extends Job<JobT, RunT>, RunT extends Run<JobT, R
      */
     @Override
     public ACL getACL() {
-        return Jenkins.getInstance().getAuthorizationStrategy().getACL(this);
+        return Jenkins.get().getAuthorizationStrategy().getACL(this);
     }
 
     public BuildTimelineWidget getTimeline() {

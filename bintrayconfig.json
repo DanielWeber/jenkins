@@ -15,20 +15,21 @@
         "public_stats": false,
         "attributes": []
     },
-
     "version": {
-        "name": "2.121.3",
-        "desc": "Jenkins LTS 2.121.3 + Performance patch(es)",
-        "released": "2018-10-01",
-        "vcs_tag": "jenkins-2.121.3-continental",
+        "name": "2.204.1",
+        "desc": "Jenkins LTS 2.204.1 + Performance patch(es)",
+        "released": "2020-01-27",
+        "vcs_tag": "jenkins-2.204.1-continental",
         "attributes": [],
         "gpgSign": false
     },
-
     "files":
         [
-        {"includePattern": "war/target/jenkins.war", "uploadPattern": "2.121.3/war/jenkins.war", "matrixParams": { "override": 1 } }
+            {
+                "includePattern": "war/target/jenkins.war",
+                "uploadPattern": "2.204.1/war/jenkins.war",
+                "matrixParams": { "override": 1 }
+            }
         ],
-
     "publish": true
 }

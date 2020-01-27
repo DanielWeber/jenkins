@@ -8,7 +8,6 @@ import hudson.model.LoadBalancer;
 import hudson.model.Queue;
 import hudson.model.Queue.BuildableItem;
 
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Logger;
@@ -53,7 +52,7 @@ public abstract class QueueSorter implements ExtensionPoint {
      * @since 1.618
      */
     public void sortBlockedItems(List<Queue.BlockedItem> blockedItems) {
-        Collections.sort(blockedItems, DEFAULT_BLOCKED_ITEM_COMPARATOR);
+        blockedItems.sort(DEFAULT_BLOCKED_ITEM_COMPARATOR);
     }
 
     /**
@@ -74,7 +73,7 @@ public abstract class QueueSorter implements ExtensionPoint {
         ExtensionList<QueueSorter> all = all();
         if (all.isEmpty())  return;
 
-        Queue q = Jenkins.getInstance().getQueue();
+        Queue q = Jenkins.get().getQueue();
         if (q.getSorter()!=null)        return; // someone has already installed something. leave that alone.
 
         q.setSorter(all.get(0));

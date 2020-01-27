@@ -34,7 +34,7 @@ import hudson.model.UnprotectedRootAction;
 import hudson.model.User;
 import hudson.security.csrf.DefaultCrumbIssuer;
 import hudson.util.HttpResponses;
-import hudson.util.Scrambler;
+import jenkins.security.apitoken.ApiTokenTestHelper;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
@@ -59,6 +59,8 @@ public class ApiCrumbExclusionTest {
     @Test
     @Issue("JENKINS-22474")
     public void callUsingApiTokenDoesNotRequireCSRFToken() throws Exception {
+        ApiTokenTestHelper.enableLegacyBehavior();
+
         j.jenkins.setSecurityRealm(j.createDummySecurityRealm());
         j.jenkins.setCrumbIssuer(null);
         User foo = User.get("foo");

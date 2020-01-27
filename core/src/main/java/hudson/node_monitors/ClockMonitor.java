@@ -53,6 +53,7 @@ public class ClockMonitor extends NodeMonitor {
      * @deprecated as of 2.0
      *      Don't use this field, use injection.
      */
+    @Deprecated
     @Restricted(NoExternalUse.class)
     public static /*almost final*/ AbstractNodeMonitorDescriptor<ClockDifference> DESCRIPTOR;
 
@@ -77,5 +78,5 @@ public class ClockMonitor extends NodeMonitor {
         public NodeMonitor newInstance(StaplerRequest req, JSONObject formData) throws FormException {
             return new ClockMonitor();
         }
-    };
+    }
 }

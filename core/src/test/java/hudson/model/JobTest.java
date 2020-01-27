@@ -2,7 +2,6 @@ package hudson.model;
 
 import static org.junit.Assert.*;
 
-import java.lang.reflect.Method;
 
 import org.hamcrest.CoreMatchers;
 import org.junit.Test;
@@ -11,15 +10,16 @@ import org.jvnet.hudson.test.Issue;
 import org.mockito.Mockito;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.MockRepository;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import hudson.EnvVars;
 import hudson.Platform;
-import hudson.util.ReflectionUtils;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({ Node.class, Platform.class })
+@PowerMockIgnore({"com.sun.org.apache.xerces.*", "javax.xml.*", "org.xml.*"})
 public class JobTest {
 
     @Test
@@ -47,7 +47,7 @@ public class JobTest {
     @Issue("JENKINS-14807")
     @Test
     public void use_slave_platform_path_separator_when_contribute_path() throws Throwable {
-        // mock environment to simulate EnvVars of slave node with different platform than master
+        // mock environment to simulate EnvVars of agent node with different platform than master
         Platform slavePlatform = Platform.current() == Platform.UNIX ? Platform.WINDOWS : Platform.UNIX;
         PowerMockito.mockStatic(Platform.class);
         Mockito.when(Platform.current()).thenReturn(slavePlatform);
@@ -74,11 +74,11 @@ public class JobTest {
         Node node = PowerMockito.mock(Node.class);
         PowerMockito.doReturn(c).when(node).toComputer();
 
-        EnvVars env = job.getEnvironment(node, null);
+        EnvVars env = job.getEnvironment(node, TaskListener.NULL);
         String path = "/test";
         env.override("PATH+TEST", path);
 
-        assertThat("The contributed PATH was not joined using the path separator defined in slave node", //
+        assertThat("The contributed PATH was not joined using the path separator defined in agent node", //
                 env.get("PATH"), //
                 CoreMatchers.containsString(path + (slavePlatform == Platform.WINDOWS ? ';' : ':')));
     }

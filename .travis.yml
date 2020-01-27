@@ -1,6 +1,6 @@
 language: java
 jdk:
-  - oraclejdk8
+  - openjdk11
 install: mvn install -DskipTests=true -Dlicense.disableCheck -Dmaven.javadoc.skip=true -B -V
 script: mvn package -DskipTests=true -Dlicense.disableCheck
 cache:

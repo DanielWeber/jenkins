@@ -23,7 +23,6 @@
  */
 package hudson.security;
 
-import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import org.acegisecurity.Authentication;
 import org.acegisecurity.context.SecurityContext;
@@ -59,7 +58,6 @@ public class ACLContext implements AutoCloseable {
         return previousContext;
     }
 
-    /** {@inheritDoc} */
     @Override
     public void close() {
         SecurityContextHolder.setContext(previousContext);

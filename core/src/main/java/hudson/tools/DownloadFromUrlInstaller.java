@@ -108,7 +108,7 @@ public abstract class DownloadFromUrlInstaller extends ToolInstaller {
      *
      * @return
      *      Return the real top directory inside {@code root} that contains the meat. In the above example,
-     *      <tt>root.child("jakarta-ant")</tt> should be returned. If there's no directory to pull up,
+     *      {@code root.child("jakarta-ant")} should be returned. If there's no directory to pull up,
      *      return null. 
      */
     protected FilePath findPullUpDirectory(FilePath root) throws IOException, InterruptedException {
@@ -133,20 +133,17 @@ public abstract class DownloadFromUrlInstaller extends ToolInstaller {
          * @return a downloadable object
          */
         public Downloadable createDownloadable() {
-            if (this instanceof DownloadFromUrlInstaller.DescriptorImpl) {
-                final DownloadFromUrlInstaller.DescriptorImpl delegate = (DownloadFromUrlInstaller.DescriptorImpl)this;
-                return new Downloadable(getId()) {
-                    public JSONObject reduce(List<JSONObject> jsonList) {
-                        if (isDefaultSchema(jsonList)) {
-                            return delegate.reduce(jsonList);
-                        } else {
-                            //if it's not default schema fall back to the super class implementation
-                            return super.reduce(jsonList);
-                        }
+            final DescriptorImpl delegate = this;
+            return new Downloadable(getId()) {
+                public JSONObject reduce(List<JSONObject> jsonList) {
+                    if (isDefaultSchema(jsonList)) {
+                        return delegate.reduce(jsonList);
+                    } else {
+                        //if it's not default schema fall back to the super class implementation
+                        return super.reduce(jsonList);
                     }
-                };
-            }
-            return new Downloadable(getId());
+                }
+            };
         }
 
         /**
@@ -178,7 +175,7 @@ public abstract class DownloadFromUrlInstaller extends ToolInstaller {
         private JSONObject reduce(List<JSONObject> jsonList) {
             List<ToolInstallerEntry> reducedToolEntries = new LinkedList<>();
 
-            HashSet<String> processedIds = new HashSet<String>();
+            HashSet<String> processedIds = new HashSet<>();
             for (JSONObject jsonToolList : jsonList) {
                 ToolInstallerList toolInstallerList = (ToolInstallerList) JSONObject.toBean(jsonToolList, ToolInstallerList.class);
                 for(ToolInstallerEntry entry : toolInstallerList.list) {
@@ -192,9 +189,8 @@ public abstract class DownloadFromUrlInstaller extends ToolInstaller {
             ToolInstallerList toolInstallerList = new ToolInstallerList();
             toolInstallerList.list = new ToolInstallerEntry[reducedToolEntries.size()];
             reducedToolEntries.toArray(toolInstallerList.list);
-            JSONObject reducedToolEntriesJsonList = JSONObject.fromObject(toolInstallerList);
             //return the list with no duplicates
-            return reducedToolEntriesJsonList;
+            return JSONObject.fromObject(toolInstallerList);
         }
 
         /**

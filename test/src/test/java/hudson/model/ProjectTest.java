@@ -25,6 +25,7 @@ package hudson.model;
 
 import com.gargoylesoftware.htmlunit.HttpMethod;
 import com.gargoylesoftware.htmlunit.WebRequest;
+import com.gargoylesoftware.htmlunit.javascript.host.event.Event;
 import hudson.*;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.security.AccessDeniedException2;
@@ -32,12 +33,9 @@ import hudson.tasks.*;
 import hudson.security.HudsonPrivateSecurityRealm;
 import hudson.security.GlobalMatrixAuthorizationStrategy;
 
-import java.io.Closeable;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Collections;
 
-import hudson.util.Scrambler;
 import org.jvnet.hudson.reactor.ReactorException;
 import org.jvnet.hudson.test.FakeChangeLogSCM;
 import hudson.scm.SCMRevisionState;
@@ -252,7 +250,8 @@ public class ProjectTest {
         assertEquals("Scm retry count should be the same as global scm retry count.", 6, p.getScmCheckoutRetryCount());
         HtmlForm form = j.createWebClient().goTo(p.getUrl() + "/configure").getFormByName("config");
         ((HtmlElement)form.getByXPath("//div[@class='advancedLink']//button").get(0)).click();
-        form.getInputByName("hasCustomScmCheckoutRetryCount").click();
+        // required due to the new default behavior of click
+        form.getInputByName("hasCustomScmCheckoutRetryCount").click(new Event(), true);
         form.getInputByName("scmCheckoutRetryCount").setValueAttribute("7");
         j.submit(form);
         assertEquals("Scm retry count was set.", 7, p.getScmCheckoutRetryCount());
@@ -371,7 +370,7 @@ public class ProjectTest {
         FreeStyleProject downstream = j.createFreeStyleProject("project-downstream");
         downstream.getBuildersList().add(Functions.isWindows() ? new BatchFile("ping -n 10 127.0.0.1 >nul") : new Shell("sleep 10"));
         p.getPublishersList().add(new BuildTrigger(Collections.singleton(downstream), Result.SUCCESS));
-        Jenkins.getInstance().rebuildDependencyGraph();
+        Jenkins.get().rebuildDependencyGraph();
         p.setBlockBuildWhenDownstreamBuilding(true);
         QueueTaskFuture<FreeStyleBuild> b2 = waitForStart(downstream);
         assertInstanceOf("Build can not start because build of downstream project has not finished.", p.getCauseOfBlockage(), BecauseOfDownstreamBuildInProgress.class);
@@ -703,7 +702,7 @@ public class ProjectTest {
      */
     @Test
     public void testJobSubmittedShouldSpawnCloud() throws Exception {
-        /**
+        /*
          * Setup a project with an SCM. Jenkins should have no executors in itself. 
          */
         FreeStyleProject proj = j.createFreeStyleProject("JENKINS-21394-spawn");        
@@ -728,7 +727,7 @@ public class ProjectTest {
     }
     
     /**
-     * Job is restricted, but label can not be provided by any cloud, only normal slaves. Then job will not submit, because no slave is available.
+     * Job is restricted, but label can not be provided by any cloud, only normal agents. Then job will not submit, because no slave is available.
      * @throws Exception
      */
     @Test
@@ -748,12 +747,12 @@ public class ProjectTest {
         j.buildAndAssertSuccess(proj);        
 
         //Now create another slave. And restrict the job to that slave. The slave is offline, leaving the job with no assignable nodes.
-        //We tell our mock SCM to return that it has got changes. But since there are no slaves, we get the desired result. 
+        //We tell our mock SCM to return that it has got changes. But since there are no agents, we get the desired result. 
         Slave s2 = j.createSlave();
         proj.setAssignedLabel(s2.getSelfLabel());
         requiresWorkspaceScm.hasChange = true;
         
-        //Poll (We now should have NO online slaves, this should now return NO_CHANGES.
+        //Poll (We now should have NO online agents, this should now return NO_CHANGES.
         PollingResult pr = proj.poll(j.createTaskListener());
         assertFalse(pr.hasChanges());
         
@@ -763,7 +762,7 @@ public class ProjectTest {
         
         t.new Runner().run();
         
-        /**
+        /*
          * Assert that the log contains the correct message.
          */
         HtmlPage log = j.createWebClient().getPage(proj, "scmPollLog");
@@ -954,7 +953,7 @@ public class ProjectTest {
 
         @Override
         public Task getOwnerTask() {
-            return (Task) Jenkins.getInstance().getItem(projectName);
+            return (Task) Jenkins.get().getItem(projectName);
         }
 
         @Override

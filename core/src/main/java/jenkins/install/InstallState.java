@@ -33,6 +33,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import jenkins.model.JenkinsLocationConfiguration;
+import jenkins.security.stapler.StaplerAccessibleType;
 import org.apache.commons.lang.StringUtils;
 /**
  * Jenkins install state.
@@ -41,10 +42,11 @@ import org.apache.commons.lang.StringUtils;
  * include something in a script that call
  * to `onSetupWizardInitialized` with a callback, for example:
  * 
- * See <em><code>upgradeWizard.js</code></em> for an example
+ * See <em>{@code upgradeWizard.js}</em> for an example
  * 
  * @author <a href="mailto:tom.fennelly@gmail.com">tom.fennelly@gmail.com</a>
  */
+@StaplerAccessibleType
 public class InstallState implements ExtensionPoint {
 
     /**

@@ -2,7 +2,7 @@ package jenkins.model;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -15,11 +15,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({NewViewLink.class, Jenkins.class})
+@PowerMockIgnore({"com.sun.org.apache.xerces.*", "javax.xml.*", "org.xml.*"})
 public class NewViewLinkTest {
 	
     @Mock
@@ -35,7 +37,7 @@ public class NewViewLinkTest {
     @Before
     public void initTests() throws Exception {
     PowerMockito.mockStatic(Jenkins.class);
-    PowerMockito.when(Jenkins.getInstance()).thenReturn(jenkins);
+    PowerMockito.when(Jenkins.get()).thenReturn(jenkins);
     PowerMockito.when(jenkins.getRootUrl()).thenReturn(rootUrl);
     newViewLink = new NewViewLink();
     }

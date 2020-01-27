@@ -4,10 +4,9 @@ import hudson.Extension;
 import hudson.model.UnprotectedRootAction;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.util.Base64;
 import org.apache.commons.codec.Charsets;
-import org.apache.commons.codec.binary.Base64;
 
 /**
  * A simple root action that exposes the public key to users so that they do not need to search for the
@@ -18,25 +17,16 @@ import org.apache.commons.codec.binary.Base64;
  */
 @Extension
 public class IdentityRootAction implements UnprotectedRootAction {
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String getIconFileName() {
         return null;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String getDisplayName() {
         return null;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String getUrlName() {
         return InstanceIdentityProvider.RSA.getKeyPair() == null ? null : "instance-identity";
@@ -52,7 +42,7 @@ public class IdentityRootAction implements UnprotectedRootAction {
         if (key == null) {
             return null;
         }
-        byte[] encoded = Base64.encodeBase64(key.getEncoded());
+        byte[] encoded = Base64.getEncoder().encode(key.getEncoded());
         int index = 0;
         StringBuilder buf = new StringBuilder(encoded.length + 20);
         while (index < encoded.length) {

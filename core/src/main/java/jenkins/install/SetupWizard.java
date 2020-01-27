@@ -21,8 +21,10 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import jenkins.model.JenkinsLocationConfiguration;
+import jenkins.security.seed.UserSeedProperty;
 import jenkins.util.SystemProperties;
 import jenkins.util.UrlHelper;
 import org.acegisecurity.Authentication;
@@ -58,11 +60,8 @@ import java.net.HttpRetryException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import jenkins.CLI;
 
 import jenkins.model.Jenkins;
 import jenkins.security.s2m.AdminWhitelistRule;
@@ -72,6 +71,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.kohsuke.accmod.restrictions.DoNotUse;
 import org.kohsuke.stapler.interceptor.RequirePOST;
+import org.kohsuke.stapler.verb.POST;
 
 /**
  * A Jenkins instance used during first-run to provide a limited set of services while
@@ -131,16 +131,6 @@ public class SetupWizard extends PageDecorator {
                     // Disable jnlp by default, but honor system properties
                     jenkins.setSlaveAgentPort(SystemProperties.getInteger(Jenkins.class.getName()+".slaveAgentPort",-1));
 
-                    // Disable CLI over Remoting
-                    CLI.get().setEnabled(false);
-
-                    // Disable old Non-Encrypted protocols ()
-                    HashSet<String> newProtocols = new HashSet<>(jenkins.getAgentProtocols());
-                    newProtocols.removeAll(Arrays.asList(
-                            "JNLP2-connect", "JNLP-connect", "CLI-connect"   
-                    ));
-                    jenkins.setAgentProtocols(newProtocols);
-                    
                     // require a crumb issuer
                     jenkins.setCrumbIssuer(new DefaultCrumbIssuer(SystemProperties.getBoolean(Jenkins.class.getName() + ".crumbIssuerProxyCompatibility",false)));
     
@@ -245,10 +235,10 @@ public class SetupWizard extends PageDecorator {
     /**
      * Called during the initial setup to create an admin user
      */
-    @RequirePOST
+    @POST
     @Restricted(NoExternalUse.class)
     public HttpResponse doCreateAdminUser(StaplerRequest req, StaplerResponse rsp) throws IOException {
-        Jenkins j = Jenkins.getInstance();
+        Jenkins j = Jenkins.get();
 
         j.checkPermission(Jenkins.ADMINISTER);
 
@@ -279,7 +269,20 @@ public class SetupWizard extends PageDecorator {
             Authentication auth = new UsernamePasswordAuthenticationToken(newUser.getId(), req.getParameter("password1"));
             auth = securityRealm.getSecurityComponents().manager.authenticate(auth);
             SecurityContextHolder.getContext().setAuthentication(auth);
-            CrumbIssuer crumbIssuer = Jenkins.getInstance().getCrumbIssuer();
+            
+            HttpSession session = req.getSession(false);
+            if (session != null) {
+                // avoid session fixation
+                session.invalidate();
+            }
+            HttpSession newSession = req.getSession(true);
+
+            UserSeedProperty userSeed = newUser.getProperty(UserSeedProperty.class);
+            String sessionSeed = userSeed.getSeed();
+            // include the new seed
+            newSession.setAttribute(UserSeedProperty.USER_SESSION_SEED, sessionSeed);
+            
+            CrumbIssuer crumbIssuer = Jenkins.get().getCrumbIssuer();
             JSONObject data = new JSONObject();
             if (crumbIssuer != null) {
                 data.accumulate("crumbRequestField", crumbIssuer.getCrumbRequestField()).accumulate("crumb", crumbIssuer.getCrumb(req));
@@ -298,9 +301,9 @@ public class SetupWizard extends PageDecorator {
                 admin.save(); // recreate this initial user if something failed
             }
         }
-    }
+    }    
     
-    @RequirePOST
+    @POST
     @Restricted(NoExternalUse.class)
     public HttpResponse doConfigureInstance(StaplerRequest req, @QueryParameter String rootUrl) {
         Jenkins.get().checkPermission(Jenkins.ADMINISTER);
@@ -507,7 +510,7 @@ public class SetupWizard extends PageDecorator {
                                         for (UpdateSite site : jenkins.getUpdateCenter().getSiteList()) {
                                             UpdateSite.Plugin sitePlug = site.getPlugin(pluginName);
                                             if (sitePlug != null
-                                                    && !sitePlug.isForNewerHudson()
+                                                    && !sitePlug.isForNewerHudson() && !sitePlug.isForNewerJava()
                                                     && !sitePlug.isNeededDependenciesForNewerJenkins()) {
                                                 foundCompatibleVersion = true;
                                                 break;
@@ -605,7 +608,7 @@ public class SetupWizard extends PageDecorator {
         @Override
         public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
             // Force root requests to the setup wizard
-            if (request instanceof HttpServletRequest) {
+            if (request instanceof HttpServletRequest && !Jenkins.get().getInstallState().isSetupComplete()) {
                 HttpServletRequest req = (HttpServletRequest) request;
                 String requestURI = req.getRequestURI();
                 if (requestURI.equals(req.getContextPath()) && !requestURI.endsWith("/")) {

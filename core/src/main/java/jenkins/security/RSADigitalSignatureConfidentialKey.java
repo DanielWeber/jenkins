@@ -23,10 +23,11 @@
  */
 package jenkins.security;
 
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.Signature;
 import java.security.interfaces.RSAPrivateKey;
+import java.util.Base64;
 
 /**
  * RSA digital signature as {@link ConfidentialKey} to prevent accidental leak of private key.
@@ -50,12 +51,10 @@ public class RSADigitalSignatureConfidentialKey extends RSAConfidentialKey {
             RSAPrivateKey key = getPrivateKey();
             Signature sig = Signature.getInstance(SIGNING_ALGORITHM + "with" + key.getAlgorithm());
             sig.initSign(key);
-            sig.update(msg.getBytes("UTF-8"));
-            return hudson.remoting.Base64.encode(sig.sign());
+            sig.update(msg.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(sig.sign());
         } catch (GeneralSecurityException e) {
             throw new SecurityException(e);
-        } catch (UnsupportedEncodingException e) {
-            throw new AssertionError(e);    // UTF-8 is mandatory
         }
     }
 
