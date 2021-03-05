@@ -16,6 +16,8 @@ This page provides information about contributing code to the Jenkins core codeb
       If you hit a new issue, please report it with a `java11-devtools-compatibility` label in our issue tracker.
   * Maven 3.5.4 or above. You can [download maven].
   * Any IDE which supports importing Maven projects.
+  * Install [NodeJS](https://nodejs.org/en/). **Note:** only needed to work on the frontend assets found on the `war` module.
+    * Frontend tasks are ran using [yarn](https://yarnpkg.com/lang/en/). Run `npm install -g yarn` to install it.
 4. Setup your development environment as described in [Preparing for Plugin Development]
 
 If you want to contribute to Jenkins or just learn about the project,
@@ -31,7 +33,9 @@ There is a description of the [building and debugging process].
 
 If you want simply to have the `jenkins.war` file as fast as possible without tests, run:
 
-    mvn clean package -pl war -am -DskipTests -Dspotbugs.skip
+```sh
+mvn -am -pl war,bom -DskipTests -Dspotbugs.skip clean install
+```
 
 The WAR file will be created in `war/target/jenkins.war`.
 After that you can start Jenkins using Java CLI ([guide]).
@@ -39,16 +43,27 @@ If you want to debug this WAR file without using Maven plugins,
 You can just start the executable with [Remote Debug Flags]
 and then attach IDE Debugger to it.
 
-To compile and launch a development instance, run:
+To launch a development instance, after the above command run:
 
-    mvn hudson-dev:run
+```sh
+mvn -pl war jetty:run
+```
 
-<!--
-This should be `mvn hudson-dev:run` as long as JENKINS-23364 is not resolved.
-For jenkis-dev:run it is currently necessary to add `org.jenkins-ci.tools` as a plugin group
-to the maven settings.xml.
-See also https://github.com/jenkinsci/jenkins/pull/4331#discussion_r341041470
--->
+(Beware that `maven-plugin` builds will not work in this mode due to class loading conflicts.)
+
+### Building frontend assets
+
+To work on the `war` module frontend assets two processes are needed at the same time:
+
+On one terminal, start a development server that will not process frontend assets:
+```sh
+mvn -pl war jetty:run -Dskip.yarn
+```
+
+On another terminal, move to the war folder and start a [webpack](https://webpack.js.org/) dev server:
+```sh
+cd war; yarn start
+```
 
 ## Testing changes
 
@@ -68,6 +83,13 @@ In addition to the included tests, you can also find extra integration and UI
 tests in the [Acceptance Test Harness (ATH)] repository.
 If you propose complex UI changes, you should create new ATH tests for them.
 
+### JavaScript unit tests
+
+In case there's only need to run the JS tests:
+```sh
+cd war; yarn test
+```
+
 ## Proposing Changes
 
 The Jenkins project source code repositories are hosted at GitHub.
@@ -85,8 +107,9 @@ It is a good practice is to create branches instead of pushing to master.
 4. Fill in the Pull Request description according to the [proposed template].
 5. Click _Create Pull Request_
 6. Wait for CI results/reviews, process the feedback.
-  * If you do not get feedback after 3 days, feel free to ping `@jenkinsci/code-reviewers` to CC.
-  * Usually we merge pull requests after 2 votes from reviewers or after 1 vote and 1-week delay without extra reviews.
+  * If you do not get feedback after 3 days, feel free to ping `@jenkinsci/core-pr-reviewers` in the comments.
+  * Usually we merge pull requests after 2 approvals from reviewers, no requested changes, and having waited some more time to give others an opportunity to provide more feedback.
+    See [this page](/docs/MAINTAINERS.adoc) for more information about our review process
 
 Once your Pull Request is ready to be merged,
 the repository maintainers will integrate it, prepare changelogs and

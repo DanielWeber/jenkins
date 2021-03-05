@@ -53,10 +53,17 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import static java.util.logging.Level.FINE;
+
+import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nonnull;
-import javax.annotation.concurrent.GuardedBy;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import net.jcip.annotations.GuardedBy;
+
+import hudson.security.ACL;
+import jenkins.model.Jenkins;
+import jenkins.util.SystemProperties;
 import jenkins.util.xstream.CriticalXStreamException;
+import org.acegisecurity.Authentication;
 
 /**
  * Custom {@link ReflectionConverter} that handle errors more gracefully.
@@ -71,11 +78,14 @@ import jenkins.util.xstream.CriticalXStreamException;
  */
 public class RobustReflectionConverter implements Converter {
 
+    private static /* non-final for Groovy */ boolean RECORD_FAILURES_FOR_ALL_AUTHENTICATIONS = SystemProperties.getBoolean(RobustReflectionConverter.class.getName() + ".recordFailuresForAllAuthentications", false);
+    private static /* non-final for Groovy */ boolean RECORD_FAILURES_FOR_ADMINS = SystemProperties.getBoolean(RobustReflectionConverter.class.getName() + ".recordFailuresForAdmins", false);
+
     protected final ReflectionProvider reflectionProvider;
     protected final Mapper mapper;
     protected transient SerializationMethodInvoker serializationMethodInvoker;
     private transient ReflectionProvider pureJavaReflectionProvider;
-    private final @Nonnull XStream2.ClassOwnership classOwnership;
+    private final @NonNull XStream2.ClassOwnership classOwnership;
     /** There are typically few critical fields around, but we end up looking up in this map a lot.
         in addition, this map is really only written to during static initialization, so we should use
         reader writer lock to avoid locking as much as possible.  In addition, to avoid looking up
@@ -363,12 +373,48 @@ public class RobustReflectionConverter implements Converter {
             reader.moveUp();
         }
 
-        // Report any class/field errors in Saveable objects
-        if (context.get("ReadError") != null && context.get("Saveable") == result) {
-            OldDataMonitor.report((Saveable)result, (ArrayList<Throwable>)context.get("ReadError"));
+        // Report any class/field errors in Saveable objects if it happens during loading of existing data from disk
+        if (shouldReportUnloadableDataForCurrentUser() && context.get("ReadError") != null && context.get("Saveable") == result) {
+            // Avoid any error in OldDataMonitor to be catastrophic. See JENKINS-62231 and JENKINS-59582
+            // The root cause is the OldDataMonitor extension is not ready before a plugin triggers an error, for 
+            // example when trying to load a field that was created by a new version and you downgrade to the previous
+            // one.
+            try {
+                OldDataMonitor.report((Saveable) result, (ArrayList<Throwable>) context.get("ReadError"));
+            } catch (Throwable t) {
+                // it should be already reported, but we report with INFO just in case
+                StringBuilder message = new StringBuilder("There was a problem reporting unmarshalling field errors");
+                Level level = Level.WARNING;
+                if (t instanceof IllegalStateException && t.getMessage().contains("Expected 1 instance of " + OldDataMonitor.class.getName())) {
+                    message.append(". Make sure this code is executed after InitMilestone.EXTENSIONS_AUGMENTED stage, for example in Plugin#postInitialize instead of Plugin#start");
+                    level = Level.INFO; // it was reported when getting the singleton for OldDataMonitor
+                }
+                // it should be already reported, but we report with INFO just in case
+                LOGGER.log(level, message.toString(), t);
+            }
             context.put("ReadError", null);
         }
         return result;
+    }
+
+    /**
+     * Returns whether the current user authentication is allowed to have errors loading data reported.
+     *
+     * <p>{@link ACL#SYSTEM} always has errors reported.
+     * If {@link #RECORD_FAILURES_FOR_ALL_AUTHENTICATIONS} is {@code true}, errors are reported for all authentications.
+     * Otherwise errors are reported for users with {@link Jenkins#ADMINISTER} permission if {@link #RECORD_FAILURES_FOR_ADMINS} is {@code true}.</p>
+     *
+     * @return whether the current user authentication is allowed to have errors loading data reported.
+     */
+    private static boolean shouldReportUnloadableDataForCurrentUser() {
+        if (RECORD_FAILURES_FOR_ALL_AUTHENTICATIONS) {
+            return true;
+        }
+        final Authentication authentication = Jenkins.getAuthentication();
+        if (authentication.equals(ACL.SYSTEM)) {
+            return true;
+        }
+        return RECORD_FAILURES_FOR_ADMINS && Jenkins.get().hasPermission(Jenkins.ADMINISTER);
     }
 
     public static void addErrorInContext(UnmarshallingContext context, Throwable e) {

@@ -119,17 +119,13 @@ public class BasicHeaderProcessor implements Filter {
         }
 
         // Handle unusual condition where an AnonymousAuthenticationToken is already present
-        // This shouldn't happen very often, as BasicProcessingFitler is meant to be earlier in the filter
+        // This shouldn't happen very often, as BasicProcessingFilter is meant to be earlier in the filter
         // chain than AnonymousProcessingFilter. Nevertheless, presence of both an AnonymousAuthenticationToken
         // together with a BASIC authentication request header should indicate reauthentication using the
         // BASIC protocol is desirable. This behaviour is also consistent with that provided by form and digest,
         // both of which force re-authentication if the respective header is detected (and in doing so replace
         // any existing AnonymousAuthenticationToken). See SEC-610.
-        if (existingAuth instanceof AnonymousAuthenticationToken) {
-            return true;
-        }
-
-        return false;
+        return existingAuth instanceof AnonymousAuthenticationToken;
     }
 
     protected void success(HttpServletRequest req, HttpServletResponse rsp, FilterChain chain, Authentication auth) throws IOException, ServletException {

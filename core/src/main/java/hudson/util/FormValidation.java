@@ -23,7 +23,6 @@
  */
 package hudson.util;
 
-import hudson.EnvVars;
 import hudson.Functions;
 import hudson.Launcher;
 import hudson.ProxyConfiguration;
@@ -37,6 +36,7 @@ import hudson.tasks.Builder;
 import hudson.util.ReflectionUtils.Parameter;
 import jenkins.model.Jenkins;
 
+import jenkins.util.SystemProperties;
 import org.kohsuke.stapler.HttpResponse;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
@@ -44,7 +44,7 @@ import org.kohsuke.stapler.StaplerResponse;
 import org.kohsuke.stapler.Stapler;
 import org.springframework.util.StringUtils;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import javax.servlet.ServletException;
 
 import java.io.File;
@@ -115,6 +115,7 @@ import static hudson.Util.*;
  * @since 1.294
  */
 public abstract class FormValidation extends IOException implements HttpResponse {
+    /* package */ static /* non-final for Groovy */ boolean APPLY_CONTENT_SECURITY_POLICY_HEADERS = SystemProperties.getBoolean(FormValidation.class.getName() + ".applyContentSecurityPolicyHeaders", true);
     /**
      * Indicates the kind of result.
      */
@@ -220,7 +221,7 @@ public abstract class FormValidation extends IOException implements HttpResponse
      * @return Validation of the least successful kind aggregating all child messages.
      * @since 1.590
      */
-    public static @Nonnull FormValidation aggregate(@Nonnull Collection<FormValidation> validations) {
+    public static @NonNull FormValidation aggregate(@NonNull Collection<FormValidation> validations) {
         if (validations == null || validations.isEmpty()) return FormValidation.ok();
 
         if (validations.size() == 1) return validations.iterator().next();
@@ -333,55 +334,34 @@ public abstract class FormValidation extends IOException implements HttpResponse
     public static FormValidation validateExecutable(String exe, FileValidator exeValidator) {
         // insufficient permission to perform validation?
         if(!Jenkins.get().hasPermission(Jenkins.ADMINISTER)) return ok();
+        final FormValidation[] result = {null};
 
-        exe = fixEmpty(exe);
-        if(exe==null)
-            return ok();
-
-        if(exe.indexOf(File.separatorChar)>=0) {
-            // this is full path
-            File f = new File(exe);
-            if(f.exists())  return exeValidator.validate(f);
-
-            File fexe = new File(exe+".exe");
-            if(fexe.exists())   return exeValidator.validate(fexe);
-
-            return error("There's no such file: "+exe);
-        }
-
-        // look in PATH
-        String path = EnvVars.masterEnvVars.get("PATH");
-        String tokenizedPath;
-        String delimiter = null;
-        if(path!=null) {
-            StringBuilder tokenizedPathBuilder = new StringBuilder();
-            for (String _dir : Util.tokenize(path.replace("\\", "\\\\"),File.pathSeparator)) {
-                if (delimiter == null) {
-                  delimiter = ", ";
-                }
-                else {
-                  tokenizedPathBuilder.append(delimiter);
+        try {
+            DOSToUnixPathHelper.iteratePath(exe, new DOSToUnixPathHelper.Helper() {
+                @Override
+                public void ok() {
+                    result[0] = FormValidation.ok();
                 }
 
-                tokenizedPathBuilder.append(_dir.replace('\\', '/'));
+                @Override
+                public void checkExecutable(File fexe) {
+                    result[0] = exeValidator.validate(fexe);
+                }
 
-                File dir = new File(_dir);
+                @Override
+                public void error(String string) {
+                    result[0] = FormValidation.error(string);
+                }
 
-                File f = new File(dir,exe);
-                if(f.exists())  return exeValidator.validate(f);
-
-                File fexe = new File(dir,exe+".exe");
-                if(fexe.exists())   return exeValidator.validate(fexe);
-            }
-            tokenizedPathBuilder.append('.');
-
-            tokenizedPath = tokenizedPathBuilder.toString();
-        } else {
-            tokenizedPath = "unavailable.";
+                @Override
+                public void validate(File fexe) {
+                    result[0] = exeValidator.validate(fexe);
+                }
+            });
+            return result[0];
+        } catch (Exception e) {
+            return FormValidation.error(e, "Unexpected error");
         }
-
-        // didn't find it
-        return error("There's no such executable "+exe+" in PATH: "+tokenizedPath);
     }
 
     /**
@@ -573,6 +553,11 @@ public abstract class FormValidation extends IOException implements HttpResponse
      */
     protected void respond(StaplerResponse rsp, String html) throws IOException, ServletException {
         rsp.setContentType("text/html;charset=UTF-8");
+        if (APPLY_CONTENT_SECURITY_POLICY_HEADERS) {
+            for (String header : new String[]{"Content-Security-Policy", "X-WebKit-CSP", "X-Content-Security-Policy"}) {
+                rsp.setHeader(header, "sandbox; default-src 'none';");
+            }
+        }
         rsp.getWriter().print(html);
     }
 

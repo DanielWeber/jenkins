@@ -10,6 +10,9 @@ Behaviour.specify("DIV.hetero-list-container", 'hetero-list', -100, function(e) 
         var menu = document.createElement("SELECT");
         var btns = findElementsBySelector(e,"INPUT.hetero-list-add"),
             btn = btns[btns.length-1]; // In case nested content also uses hetero-list
+        if (!btn) {
+            return;
+        }
         YAHOO.util.Dom.insertAfter(menu,btn);
 
         var prototypes = $(e.lastChild);
@@ -23,7 +26,12 @@ Behaviour.specify("DIV.hetero-list-container", 'hetero-list', -100, function(e) 
             var name = n.getAttribute("name");
             var tooltip = n.getAttribute("tooltip");
             var descriptorId = n.getAttribute("descriptorId");
-            menu.options[i] = new Option(n.getAttribute("title"),""+i);
+            // YUI Menu interprets this <option> text node as HTML, so let's escape it again!
+            var title = n.getAttribute("title");
+            if (title) {
+                title = title.escapeHTML();
+            }
+            menu.options[i] = new Option(title,""+i);
             templates.push({html:n.innerHTML, name:name, tooltip:tooltip,descriptorId:descriptorId});
             i++;
         });

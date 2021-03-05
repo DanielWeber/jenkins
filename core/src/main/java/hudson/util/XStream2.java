@@ -47,7 +47,6 @@ import com.thoughtworks.xstream.io.HierarchicalStreamReader;
 import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
 import com.thoughtworks.xstream.io.ReaderWrapper;
 import com.thoughtworks.xstream.mapper.CannotResolveClassException;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.PluginManager;
 import hudson.PluginWrapper;
 import hudson.XmlFile;
@@ -79,8 +78,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 /**
  * {@link XStream} enhanced for additional Java5 support and improved robustness.
@@ -142,7 +141,7 @@ public class XStream2 extends XStream {
      * Even for primitive-valued fields, it is useful to guarantee
      * that unmarshaling will produce the same result as creating a new instance.
      * <p>Do <em>not</em> use in cases where the root objects defines fields (typically {@code final})
-     * which it expects to be {@link Nonnull} unless you are prepared to restore default values for those fields.
+     * which it expects to be {@link NonNull} unless you are prepared to restore default values for those fields.
      * @param nullOut whether to perform this special behavior;
      *                false to use the stock XStream behavior of leaving unmentioned {@code root} fields untouched
      * @see XmlFile#unmarshalNullingOut
@@ -328,7 +327,7 @@ public class XStream2 extends XStream {
         mapperInjectionPoint.setDelegate(m);
     }
 
-    final class MapperInjectionPoint extends MapperDelegate {
+    final static class MapperInjectionPoint extends MapperDelegate {
         public MapperInjectionPoint(Mapper wrapped) {
             super(wrapped);
         }
@@ -516,7 +515,6 @@ public class XStream2 extends XStream {
 
         private PluginManager pm;
 
-        @SuppressFBWarnings("NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE") // classOwnership checked for null so why does FB complain?
         @Override public String ownerOf(Class<?> clazz) {
             if (classOwnership != null) {
                 return classOwnership.ownerOf(clazz);

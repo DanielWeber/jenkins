@@ -16,10 +16,10 @@
         "attributes": []
     },
     "version": {
-        "name": "2.204.5",
-        "desc": "Jenkins LTS 2.204.5 + Performance patch(es)",
-        "released": "2020-03-10",
-        "vcs_tag": "jenkins-2.204.5-continental",
+        "name": "2.263.4",
+        "desc": "Jenkins LTS 2.263.4 + Performance patch(es)",
+        "released": "2021-03-05",
+        "vcs_tag": "jenkins-2.263.4-continental",
         "attributes": [],
         "gpgSign": false
     },
@@ -27,7 +27,7 @@
         [
             {
                 "includePattern": "war/target/jenkins.war",
-                "uploadPattern": "2.204.5/war/jenkins.war",
+                "uploadPattern": "2.263.4/war/jenkins.war",
                 "matrixParams": { "override": 1 }
             }
         ],

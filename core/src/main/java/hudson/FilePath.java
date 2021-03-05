@@ -48,6 +48,7 @@ import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.remoting.Which;
 import hudson.security.AccessControlled;
+import hudson.slaves.WorkspaceList;
 import hudson.util.DaemonThreadFactory;
 import hudson.util.DirScanner;
 import hudson.util.ExceptionCatchingThreadFactory;
@@ -59,7 +60,7 @@ import hudson.util.NamingThreadFactory;
 import hudson.util.io.Archiver;
 import hudson.util.io.ArchiverFactory;
 
-
+import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileFilter;
@@ -82,9 +83,10 @@ import java.net.URLConnection;
 import java.nio.file.FileSystemException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.LinkOption;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
@@ -107,9 +109,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.Nullable;
 import jenkins.FilePathFilter;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.SlaveToMasterFileCallable;
@@ -256,7 +258,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      *      To create a path that represents a remote path, pass in a {@link Channel}
      *      that's connected to that machine. If {@code null}, that means the local file path.
      */
-    public FilePath(@CheckForNull VirtualChannel channel, @Nonnull String remote) {
+    public FilePath(@CheckForNull VirtualChannel channel, @NonNull String remote) {
         this.channel = channel instanceof LocalChannel ? null : channel;
         this.remote = normalize(remote);
     }
@@ -268,7 +270,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * A "local" path means a file path on the computer where the
      * constructor invocation happened.
      */
-    public FilePath(@Nonnull File localPath) {
+    public FilePath(@NonNull File localPath) {
         this.channel = null;
         this.remote = normalize(localPath.getPath());
     }
@@ -278,7 +280,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * @param base starting point for resolution, and defines channel
      * @param rel a path which if relative will be resolved against base
      */
-    public FilePath(@Nonnull FilePath base, @Nonnull String rel) {
+    public FilePath(@NonNull FilePath base, @NonNull String rel) {
         this.channel = base.channel;
         this.remote = normalize(resolvePathIfRelative(base, rel));
     }
@@ -288,7 +290,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
         return this;
     }
 
-    private String resolvePathIfRelative(@Nonnull FilePath base, @Nonnull String rel) {
+    private String resolvePathIfRelative(@NonNull FilePath base, @NonNull String rel) {
         if(isAbsolute(rel)) return rel;
         if(base.isUnix()) {
             // shouldn't need this replace, but better safe than sorry
@@ -303,7 +305,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
     /**
      * Is the given path name an absolute path?
      */
-    private static boolean isAbsolute(@Nonnull String rel) {
+    private static boolean isAbsolute(@NonNull String rel) {
         return rel.startsWith("/") || DRIVE_PATTERN.matcher(rel).matches() || UNC_PATTERN.matcher(rel).matches();
     }
 
@@ -316,7 +318,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * so remove them.
      */
     @Restricted(NoExternalUse.class)
-    public static String normalize(@Nonnull String path) {
+    public static String normalize(@NonNull String path) {
         StringBuilder buf = new StringBuilder();
         // Check for prefix designating absolute path
         Matcher m = ABSOLUTE_PREFIX_PATTERN.matcher(path);
@@ -473,6 +475,27 @@ public final class FilePath implements SerializableOnlyOverRemoting {
     }
 
     /**
+     * Uses the given scanner on 'this' directory to list up files and then archive it to a zip stream.
+     *
+     * @param out The OutputStream to write the zip into.
+     * @param scanner A DirScanner for scanning the directory and filtering its contents.
+     * @param verificationRoot A root or base directory for checking for any symlinks in this files parentage.
+     *             Any symlinks between a file and root should be ignored.
+     *             Symlinks in the parentage outside root will not be checked.
+     * @param noFollowLinks true if it should not follow links.
+     * @param prefix The portion of file path that will be added at the beginning of the relative path inside the archive.
+     *               If non-empty, a trailing forward slash will be enforced.
+     *
+     * @return The number of files/directories archived.
+     *          This is only really useful to check for a situation where nothing
+     */
+    @Restricted(NoExternalUse.class)
+    public int zip(OutputStream out, DirScanner scanner, String verificationRoot, boolean noFollowLinks, String prefix) throws IOException, InterruptedException {
+        ArchiverFactory archiverFactory = noFollowLinks ? ArchiverFactory.createZipWithoutSymlink(prefix) : ArchiverFactory.ZIP;
+        return archive(archiverFactory, out, scanner, verificationRoot, noFollowLinks);
+    }
+
+    /**
      * Archives this directory into the specified archive format, to the given {@link OutputStream}, by using
      * {@link DirScanner} to choose what files to include.
      *
@@ -481,23 +504,48 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      *      is archived.
      */
     public int archive(final ArchiverFactory factory, OutputStream os, final DirScanner scanner) throws IOException, InterruptedException {
+        return archive(factory, os, scanner, null, false);
+    }
+
+    /**
+     * Archives this directory into the specified archive format, to the given {@link OutputStream}, by using
+     * {@link DirScanner} to choose what files to include.
+     *
+     * @param factory The ArchiverFactory for creating the archive.
+     * @param os The OutputStream to write the zip into.
+     * @param verificationRoot A root or base directory for checking for any symlinks in this files parentage.
+     *             Any symlinks between a file and root should be ignored.
+     *             Symlinks in the parentage outside root will not be checked.
+     * @param noFollowLinks true if it should not follow links.
+     *
+     * @return The number of files/directories archived.
+     *          This is only really useful to check for a situation where nothing
+     */
+    @Restricted(NoExternalUse.class)
+    public int archive(final ArchiverFactory factory, OutputStream os, final DirScanner scanner,
+                       String verificationRoot, boolean noFollowLinks) throws IOException, InterruptedException {
         final OutputStream out = (channel!=null)?new RemoteOutputStream(os):os;
-        return act(new Archive(factory, out, scanner));
+        return act(new Archive(factory, out, scanner, verificationRoot, noFollowLinks));
     }
     private class Archive extends SecureFileCallable<Integer> {
         private final ArchiverFactory factory;
         private final OutputStream out;
         private final DirScanner scanner;
-        Archive(ArchiverFactory factory, OutputStream out, DirScanner scanner) {
+        private final String verificationRoot;
+        private final boolean noFollowLinks;
+
+        Archive(ArchiverFactory factory, OutputStream out, DirScanner scanner, String verificationRoot, boolean noFollowLinks) {
             this.factory = factory;
             this.out = out;
             this.scanner = scanner;
+            this.verificationRoot = verificationRoot;
+            this.noFollowLinks = noFollowLinks;
         }
         @Override
             public Integer invoke(File f, VirtualChannel channel) throws IOException {
                 Archiver a = factory.create(out);
                 try {
-                    scanner.scan(f,reading(a));
+                    scanner.scan(f, ignoringSymlinks(reading(a), verificationRoot, noFollowLinks));
                 } finally {
                     a.close();
                 }
@@ -689,6 +737,46 @@ public final class FilePath implements SerializableOnlyOverRemoting {
         }
     }
 
+    @Restricted(NoExternalUse.class)
+    public boolean hasSymlink(FilePath verificationRoot, boolean noFollowLinks) throws IOException, InterruptedException {
+        return act(new HasSymlink(verificationRoot == null ? null : verificationRoot.remote, noFollowLinks));
+    }
+    private static class HasSymlink extends SecureFileCallable<Boolean> {
+        private static final long serialVersionUID = 1L;
+        private final String verificationRoot;
+        private final boolean noFollowLinks;
+
+        public HasSymlink(String verificationRoot, boolean noFollowLinks) {
+            this.verificationRoot = verificationRoot;
+            this.noFollowLinks = noFollowLinks;
+        }
+
+        public Boolean invoke(File f, VirtualChannel channel) throws IOException {
+            return isSymlink(f, verificationRoot, noFollowLinks);
+        }
+    }
+
+    @Restricted(NoExternalUse.class)
+    public boolean containsSymlink(FilePath verificationRoot, boolean noFollowLinks) throws IOException, InterruptedException {
+        return !list(new SymlinkRetainingFileFilter(verificationRoot, noFollowLinks)).isEmpty();
+    }
+
+    private static class SymlinkRetainingFileFilter implements FileFilter, Serializable {
+
+        private final String verificationRoot;
+        private final boolean noFollowLinks;
+
+        public SymlinkRetainingFileFilter(FilePath verificationRoot, boolean noFollowLinks) {
+            this.verificationRoot = verificationRoot == null ? null : verificationRoot.remote;
+            this.noFollowLinks = noFollowLinks;
+        }
+
+        public boolean accept(File file) {
+            return isSymlink(file, verificationRoot, noFollowLinks);
+        }
+        private static final long serialVersionUID = 1L;
+    }
+
     /**
      * Creates a symlink to the specified target.
      *
@@ -758,10 +846,10 @@ public final class FilePath implements SerializableOnlyOverRemoting {
     public enum TarCompression {
         NONE {
             public InputStream extract(InputStream in) {
-                return in;
+                return new BufferedInputStream(in);
             }
             public OutputStream compress(OutputStream out) {
-                return out;
+                return new BufferedOutputStream(out);
             }
         },
         GZIP {
@@ -843,14 +931,14 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      *      was considered up to date.
      * @since 1.299
      */
-    public boolean installIfNecessaryFrom(@Nonnull URL archive, @CheckForNull TaskListener listener, @Nonnull String message) throws IOException, InterruptedException {
+    public boolean installIfNecessaryFrom(@NonNull URL archive, @CheckForNull TaskListener listener, @NonNull String message) throws IOException, InterruptedException {
         if (listener == null) {
             listener = TaskListener.NULL;
         }
         return installIfNecessaryFrom(archive, listener, message, MAX_REDIRECTS);
     }
 
-    private boolean installIfNecessaryFrom(@Nonnull URL archive, @Nonnull TaskListener listener, @Nonnull String message, int maxRedirects) throws InterruptedException, IOException {
+    private boolean installIfNecessaryFrom(@NonNull URL archive, @NonNull TaskListener listener, @NonNull String message, int maxRedirects) throws InterruptedException, IOException {
         try {
             FilePath timestamp = this.child(".timestamp");
             long lastModified = timestamp.lastModified();
@@ -1257,6 +1345,44 @@ public final class FilePath implements SerializableOnlyOverRemoting {
             return mkdirs(f) || f.exists();
         }
     }
+    
+    /**
+     * Deletes all suffixes recursively.
+     * @throws IOException if it exists but could not be successfully deleted
+     * @since 2.244
+     */
+    public void deleteSuffixesRecursive() throws IOException, InterruptedException {
+        act(new DeleteSuffixesRecursive());
+    }
+
+    /**
+     * Deletes all suffixed directories that are separated by {@link WorkspaceList#COMBINATOR}, including all its contents recursively.
+     */
+    private class DeleteSuffixesRecursive extends SecureFileCallable<Void> {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public Void invoke(File f, VirtualChannel channel) throws IOException {
+            for (File file : listParentFiles(f)) {
+                if (file.getName().startsWith(f.getName() + WorkspaceList.COMBINATOR)) {
+                    Util.deleteRecursive(file.toPath(), path -> deleting(path.toFile()));
+                }
+            }
+            
+            return null;
+        }
+    }
+
+    private static File[] listParentFiles(File f) {
+        File parentFile = f.getParentFile();
+        if (parentFile != null) {
+            File[] files = parentFile.listFiles();
+            if (files != null) {
+                return files;
+            }
+        }
+        return new File[0];
+    }
 
     /**
      * Deletes this directory, including all its contents recursively.
@@ -1321,10 +1447,13 @@ public final class FilePath implements SerializableOnlyOverRemoting {
     }
 
     /**
-     * Short for {@code getParent().child(rel)}. Useful for getting other files in the same directory. 
+     * Short for {@code getParent().child(rel)}. Useful for getting other files in the same directory.
+     * @return null if {@link #getParent} would have
      */
+    @CheckForNull
     public FilePath sibling(String rel) {
-        return getParent().child(rel);
+        FilePath parent = getParent();
+        return parent != null ? parent.child(rel) : null;
     }
 
     /**
@@ -1339,7 +1468,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * @param relOrAbsolute a relative or absolute path
      * @return a file on the same channel
      */
-    public @Nonnull FilePath child(String relOrAbsolute) {
+    public @NonNull FilePath child(String relOrAbsolute) {
         return new FilePath(this,relOrAbsolute);
     }
 
@@ -1347,6 +1476,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * Gets the parent file.
      * @return parent FilePath or null if there is no parent
      */
+    @CheckForNull
     public FilePath getParent() {
         int i = remote.length() - 2;
         for (; i >= 0; i--) {
@@ -1520,7 +1650,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
                     tempPath = Files.createTempDirectory(Util.fileToPath(dir), name,
                             PosixFilePermissions.asFileAttribute(EnumSet.allOf(PosixFilePermission.class)));
                 } else {
-                    tempPath = Files.createTempDirectory(Util.fileToPath(dir), name, new FileAttribute<?>[] {});
+                    tempPath = Files.createTempDirectory(Util.fileToPath(dir), name);
                 }
 
                 if (tempPath.toFile() == null) {
@@ -1789,9 +1919,26 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * <p>
      * This method returns direct children of the directory denoted by the 'this' object.
      */
-    @Nonnull
+    @NonNull
     public List<FilePath> list() throws IOException, InterruptedException {
         return list((FileFilter)null);
+    }
+
+    /**
+     * List up files and directories in this directory.
+     *
+     * This is intended to allow the caller to provide {@link java.nio.file.LinkOption#NOFOLLOW_LINKS} to ignore
+     * symlinks.
+     * @param verificationRoot A root or base directory for checking for any symlinks in this files parentage.
+     *             Any symlinks between a file and root should be ignored.
+     *             Symlinks in the parentage outside root will not be checked.
+     * @param noFollowLinks true if it should not follow links.
+     * @return Direct children of this directory.
+     */
+    @Restricted(NoExternalUse.class)
+    @NonNull
+    public List<FilePath> list(FilePath verificationRoot, boolean noFollowLinks) throws IOException, InterruptedException {
+        return list(new SymlinkDiscardingFileFilter(verificationRoot, noFollowLinks));
     }
 
     /**
@@ -1799,7 +1946,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      *
      * @return can be empty but never null. Doesn't contain "." and ".."
      */
-    @Nonnull
+    @NonNull
     public List<FilePath> listDirectories() throws IOException, InterruptedException {
         return list(new DirectoryFilter());
     }
@@ -1820,7 +1967,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      *      If this {@link FilePath} represents a remote path,
      *      the filter object will be executed on the remote machine.
      */
-    @Nonnull
+    @NonNull
     public List<FilePath> list(final FileFilter filter) throws IOException, InterruptedException {
         if (filter != null && !(filter instanceof Serializable)) {
             throw new IllegalArgumentException("Non-serializable filter of " + filter.getClass());
@@ -1856,7 +2003,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * @return
      *      can be empty but always non-null.
      */
-    @Nonnull
+    @NonNull
     public FilePath[] list(final String includes) throws IOException, InterruptedException {
         return list(includes, null);
     }
@@ -1871,7 +2018,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      *      can be empty but always non-null.
      * @since 1.407
      */
-    @Nonnull
+    @NonNull
     public FilePath[] list(final String includes, final String excludes) throws IOException, InterruptedException {
         return list(includes, excludes, true);
     }
@@ -1887,7 +2034,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      *      can be empty but always non-null.
      * @since 1.465
      */
-    @Nonnull
+    @NonNull
     public FilePath[] list(final String includes, final String excludes, final boolean defaultExcludes) throws IOException, InterruptedException {
         return act(new ListGlob(includes, excludes, defaultExcludes));
     }
@@ -1919,7 +2066,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * @return
      *      A set of relative file names from the base directory.
      */
-    @Nonnull
+    @NonNull
     private static String[] glob(File dir, String includes, String excludes, boolean defaultExcludes) throws IOException {
         if(isAbsolute(includes))
             throw new IOException("Expecting Ant GLOB pattern, but saw '"+includes+"'. See http://ant.apache.org/manual/Types/fileset.html for syntax");
@@ -1938,25 +2085,112 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * Reads this file.
      */
     public InputStream read() throws IOException, InterruptedException {
+        return read(null, false);
+    }
+
+    @Restricted(NoExternalUse.class)
+    public InputStream read(FilePath rootPath, boolean noFollowLinks) throws IOException, InterruptedException {
+        String rootPathString = rootPath == null ? null : rootPath.remote;
         if(channel==null) {
-            return Files.newInputStream(fileToPath(reading(new File(remote))));
+            File file = reading(new File(remote));
+            InputStream inputStream = newInputStreamDenyingSymlinkAsNeeded(file, rootPathString, noFollowLinks);
+            return inputStream;
         }
 
         final Pipe p = Pipe.createRemoteToLocal();
-        actAsync(new Read(p));
+        actAsync(new Read(p, rootPathString, noFollowLinks));
 
         return p.getIn();
     }
+
+    @Restricted(NoExternalUse.class)
+    public static InputStream newInputStreamDenyingSymlinkAsNeeded(File file, String verificationRoot, boolean noFollowLinks) throws IOException {
+        InputStream inputStream = null;
+        try {
+            denySymlink(file, verificationRoot, noFollowLinks);
+            inputStream = noFollowLinks ? Files.newInputStream(fileToPath(file), LinkOption.NOFOLLOW_LINKS) : Files.newInputStream(fileToPath(file));
+            denySymlink(file, verificationRoot, noFollowLinks);
+        } catch (IOException ioe) {
+            if (inputStream != null) {
+                inputStream.close();
+            }
+            throw ioe;
+        }
+        return inputStream;
+    }
+
+    private static void denySymlink(File file, String root, boolean noFollowLinks) throws IOException {
+        /* This should be checked right before the file is opened or otherwise traversed.
+           If at all possible, it should also be checked immediately afterwards.
+           This narrows any possible race conditions that may exist in weird situations,
+           platforms, or implementations.
+           newInputStreamDenyingSymlinkAsNeeded(...) demonstrates how this would be done.
+
+           This is useful for preventing symlink following on systems that don't support
+           LinkOption.NOFOLLOW_LINK. Notable among those is AIX. It is also important for
+           prohibiting Windows Junctions, which are not considered symlinks by the
+           Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS) implementation.
+        */
+
+        if (isSymlink(file, root, noFollowLinks)) {
+            throw new IOException("Symlinks are prohibited.");
+        }
+    }
+
+    @Restricted(NoExternalUse.class)
+    public static boolean isSymlink(File file, String root, boolean noFollowLinks) {
+        if (noFollowLinks) {
+            if (Util.isSymlink(file.toPath())) {
+                return true;
+            }
+
+            return isFileAncestorSymlink(file, root);
+        }
+        return false;
+    }
+
+    /**
+     * Determines whether an ancestor of this file is a symlink, between the specified
+     * file and the root path. Ancestors further up the tree are not considered.
+     * @param file The base file for the beginning of the search.
+     * @param root The root path for ending the search.
+     * @return True if there is a symlink within the domain. False otherwise.
+     */
+    private static boolean isFileAncestorSymlink(File file, String root) {
+        if (root != null) {
+            Path rootPath = Paths.get(root);
+            Path currPath = file.toPath();
+            try {
+                while (!getRealPath(currPath).equals(getRealPath(rootPath))) {
+                    if (Util.isSymlink(currPath)) {
+                        return true;
+                    }
+                    currPath = currPath.getParent();
+                    if (currPath == null) {
+                        return false;
+                    }
+                }
+            } catch (IOException ioe) {
+                return false;
+            }
+        }
+        return false;
+    }
+
     private class Read extends SecureFileCallable<Void> {
         private static final long serialVersionUID = 1L;
         private final Pipe p;
-        Read(Pipe p) {
+        private String verificationRoot;
+        private boolean noFollowLinks;
+
+        Read(Pipe p, String verificationRoot, boolean noFollowLinks) {
             this.p = p;
+            this.verificationRoot = verificationRoot;
+            this.noFollowLinks = noFollowLinks;
         }
         @Override
         public Void invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
-            try (InputStream fis = Files.newInputStream(fileToPath(reading(f)));
-                    OutputStream out = p.getOut()) {
+            try (InputStream fis = newInputStreamDenyingSymlinkAsNeeded(reading(f), verificationRoot, noFollowLinks); OutputStream out = p.getOut()) {
                 org.apache.commons.io.IOUtils.copy(fis, out);
             } catch (Exception x) {
                 p.error(x);
@@ -2006,25 +2240,35 @@ public final class FilePath implements SerializableOnlyOverRemoting {
         }
 
         final Pipe p = Pipe.createRemoteToLocal();
-        actAsync(new SecureFileCallable<Void>() {
-            private static final long serialVersionUID = 1L;
-
-            public Void invoke(File f, VirtualChannel channel) throws IOException {
-                try (OutputStream os = p.getOut();
-                     OutputStream out = new java.util.zip.GZIPOutputStream(os, 8192);
-                     RandomAccessFile raf = new RandomAccessFile(reading(f), "r")) {
-                    raf.seek(offset);
-                    byte[] buf = new byte[8192];
-                    int len;
-                    while ((len = raf.read(buf)) >= 0) {
-                        out.write(buf, 0, len);
-                    }
-                    return null;
-                }
-            }
-        });
-
+        actAsync(new OffsetPipeSecureFileCallable(p, offset));
         return new java.util.zip.GZIPInputStream(p.getIn());
+    }
+    
+    private class OffsetPipeSecureFileCallable extends SecureFileCallable<Void> {
+        private static final long serialVersionUID = 1L;
+        
+        private Pipe p;
+        private long offset;
+        
+        private OffsetPipeSecureFileCallable(Pipe p, long offset) {
+            this.p = p;
+            this.offset = offset;
+        }
+        
+        @Override
+        public Void invoke(File f, VirtualChannel channel) throws IOException {
+            try (OutputStream os = p.getOut();
+                 OutputStream out = new java.util.zip.GZIPOutputStream(os, 8192);
+                 RandomAccessFile raf = new RandomAccessFile(reading(f), "r")) {
+                raf.seek(offset);
+                byte[] buf = new byte[8192];
+                int len;
+                while ((len = raf.read(buf)) >= 0) {
+                    out.write(buf, 0, len);
+                }
+                return null;
+            }
+        }
     }
 
     /**
@@ -2359,7 +2603,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * @return the number of files copied
      * @since 2.196
      */
-    public int copyRecursiveTo(final DirScanner scanner, final FilePath target, final String description, @Nonnull TarCompression compression) throws IOException, InterruptedException {
+    public int copyRecursiveTo(final DirScanner scanner, final FilePath target, final String description, @NonNull TarCompression compression) throws IOException, InterruptedException {
         if(this.channel==target.channel) {
             // local to local copy.
             return act(new CopyRecursiveLocal(target, scanner));
@@ -2486,7 +2730,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
         private final String description;
         private final TarCompression compression;
 
-        ReadToTar(Pipe pipe, String description, @Nonnull TarCompression compression) {
+        ReadToTar(Pipe pipe, String description, @NonNull TarCompression compression) {
             this.pipe = pipe;
             this.description = description;
             this.compression = compression;
@@ -2504,7 +2748,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
         private final DirScanner scanner;
         private final Pipe pipe;
         private final TarCompression compression;
-        WriteToTar(DirScanner scanner, Pipe pipe, @Nonnull TarCompression compression) {
+        WriteToTar(DirScanner scanner, Pipe pipe, @NonNull TarCompression compression) {
             this.scanner = scanner;
             this.pipe = pipe;
             this.compression = compression;
@@ -2520,7 +2764,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
         private final Pipe pipe;
         private final DirScanner scanner;
         private final TarCompression compression;
-        CopyRecursiveRemoteToLocal(Pipe pipe, DirScanner scanner, @Nonnull TarCompression compression) {
+        CopyRecursiveRemoteToLocal(Pipe pipe, DirScanner scanner, @NonNull TarCompression compression) {
             this.pipe = pipe;
             this.scanner = scanner;
             this.compression = compression;
@@ -2625,7 +2869,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
     }
 
     private static final class IsUnix extends MasterToSlaveCallable<Boolean,IOException> {
-        @Nonnull
+        @NonNull
         public Boolean call() throws IOException {
             return File.pathSeparatorChar==':';
         }
@@ -2754,7 +2998,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
                                     int idx = findSeparator(f);
                                     if(idx==-1)     break;
 
-                                    prefix.append(f.substring(0, idx)).append('/');
+                                    prefix.append(f, 0, idx).append('/');
                                     f=f.substring(idx+1);
                                     if(hasMatch(dir,prefix+fileMask,caseSensitive))
                                         return Messages.FilePath_validateAntFileMask_doesntMatchAndSuggest(fileMask, prefix+fileMask);
@@ -2971,7 +3215,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
     private static void checkPermissionForValidate() {
         AccessControlled subject = Stapler.getCurrentRequest().findAncestorObject(AbstractProject.class);
         if (subject == null)
-            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            Jenkins.get().checkPermission(Jenkins.MANAGE);
         else
             subject.checkPermission(Item.CONFIGURE);
     }
@@ -3161,10 +3405,10 @@ public final class FilePath implements SerializableOnlyOverRemoting {
     /**
      * Channel to the current instance.
      */
-    @Nonnull
+    @NonNull
     public static final LocalChannel localChannel = new LocalChannel(threadPoolForRemoting);
 
-    private @Nonnull SoloFilePathFilter filterNonNull() {
+    private @NonNull SoloFilePathFilter filterNonNull() {
         return filter!=null ? filter : UNRESTRICTED;
     }
 
@@ -3193,6 +3437,29 @@ public final class FilePath implements SerializableOnlyOverRemoting {
                 return v.understandsSymlink();
             }
         };
+    }
+
+    /**
+     * Wraps {@link FileVisitor} to ignore symlinks.
+     */
+    @Restricted(NoExternalUse.class)
+    public static FileVisitor ignoringSymlinks(final FileVisitor v, String verificationRoot, boolean noFollowLinks) {
+        if (noFollowLinks) {
+            return new FileVisitor() {
+                @Override
+                public void visit(File f, String relativePath) throws IOException {
+                    if (verificationRoot == null || !FilePath.isSymlink(f, verificationRoot, noFollowLinks)) {
+                        v.visit(f, relativePath);
+                    }
+                }
+
+                @Override
+                public boolean understandsSymlink() {
+                    return false;
+                }
+            };
+        }
+        return v;
     }
 
     /**
@@ -3271,20 +3538,20 @@ public final class FilePath implements SerializableOnlyOverRemoting {
      * TODO un-restrict it in a weekly after the patch
      */
     @Restricted(NoExternalUse.class)
-    public boolean isDescendant(@Nonnull String potentialChildRelativePath) throws IOException, InterruptedException {
+    public boolean isDescendant(@NonNull String potentialChildRelativePath) throws IOException, InterruptedException {
         return act(new IsDescendant(potentialChildRelativePath));
     }
 
-    private class IsDescendant extends SecureFileCallable<Boolean> {
+    private static class IsDescendant extends SecureFileCallable<Boolean> {
         private static final long serialVersionUID = 1L;
         private String potentialChildRelativePath;
 
-        private IsDescendant(@Nonnull String potentialChildRelativePath){
+        private IsDescendant(@NonNull String potentialChildRelativePath){
             this.potentialChildRelativePath = potentialChildRelativePath;
         }
 
         @Override
-        public Boolean invoke(@Nonnull File parentFile, @Nonnull VirtualChannel channel) throws IOException, InterruptedException {
+        public Boolean invoke(@NonNull File parentFile, @NonNull VirtualChannel channel) throws IOException, InterruptedException {
             if (new File(potentialChildRelativePath).isAbsolute()) {
                 throw new IllegalArgumentException("Only a relative path is supported, the given path is absolute: " + potentialChildRelativePath);
             }
@@ -3359,7 +3626,7 @@ public final class FilePath implements SerializableOnlyOverRemoting {
             return current;
         }
         
-        private @Nonnull Path windowsToRealPath(@Nonnull Path path) throws IOException {
+        private @NonNull Path windowsToRealPath(@NonNull Path path) throws IOException {
             try {
                 return path.toRealPath();
             }
@@ -3375,5 +3642,41 @@ public final class FilePath implements SerializableOnlyOverRemoting {
         }
     }
 
+    private static Path getRealPath(Path path) throws IOException {
+        return Functions.isWindows() ? windowsToRealPath(path) : path.toRealPath();
+    }
+
+    private static @NonNull Path windowsToRealPath(@NonNull Path path) throws IOException {
+        try {
+            return path.toRealPath();
+        }
+        catch (IOException e) {
+            if (LOGGER.isLoggable(Level.FINE)) {
+                LOGGER.log(Level.FINE, String.format("relaxedToRealPath cannot use the regular toRealPath on %s, trying with toRealPath(LinkOption.NOFOLLOW_LINKS)", path), e);
+            }
+        }
+
+        // that's required for specific environment like Windows Server 2016, running MSFT docker
+        // where the root is a <SYMLINKD>
+        return path.toRealPath(LinkOption.NOFOLLOW_LINKS);
+    }
+
     private static final SoloFilePathFilter UNRESTRICTED = SoloFilePathFilter.wrap(FilePathFilter.UNRESTRICTED);
+
+    private static class SymlinkDiscardingFileFilter implements FileFilter, Serializable {
+
+        private final String verificationRoot;
+        private final boolean noFollowLinks;
+
+        public SymlinkDiscardingFileFilter(FilePath verificationRoot, boolean noFollowLinks) {
+            this.verificationRoot = verificationRoot == null ? null : verificationRoot.remote;
+            this.noFollowLinks = noFollowLinks;
+        }
+
+        public boolean accept(File file) {
+            return !isSymlink(file, verificationRoot, noFollowLinks);
+        }
+        private static final long serialVersionUID = 1L;
+    }
+
 }
