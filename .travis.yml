@@ -2,12 +2,14 @@ language: java
 jdk:
   - openjdk8
 install: mvn install -Dmaven.test.skip=true -Dlicense.disableCheck -Dmaven.javadoc.skip=true -B -V
+script:
+  - echo "skipping tests"
 cache:
   directories:
     - $HOME/.m2
 deploy:
   provider: bintray
-  cleanup: false
+  skip_cleanup: true
   file: bintrayconfig.json
   user: danielweber
   key:
