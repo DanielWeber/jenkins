@@ -486,14 +486,8 @@ public abstract class ExtensionFinder implements ExtensionPoint {
                     return;
                 }
                 try {
-                    ClassLoader ecl = c.getClassLoader();
-                    if (ecl != null) { // Not bootstrap classloader
-                        Method m = ClassLoader.class.getDeclaredMethod("resolveClass", Class.class);
-                        m.setAccessible(true);
-                        m.invoke(ecl, c);
-                    }
                     for (Class<?> cc = c; cc != Object.class && cc != null; cc = cc.getSuperclass()) {
-                        /**
+                        /*
                          * See {@link com.google.inject.spi.InjectionPoint#getInjectionPoints(TypeLiteral, boolean, Errors)}
                          */
                         cc.getGenericSuperclass();
@@ -508,7 +502,7 @@ public abstract class ExtensionFinder implements ExtensionPoint {
                     }
                     LOGGER.log(Level.FINER, "{0} looks OK", c);
                 } catch (Exception x) {
-                    throw (LinkageError)new LinkageError("Failed to resolve "+c).initCause(x);
+                    throw new LinkageError("Failed to resolve "+c, x);
                 }
             }
 
@@ -578,7 +572,7 @@ public abstract class ExtensionFinder implements ExtensionPoint {
                 // so that we invoke them before derived class one. This isn't specified in JSR-250 but implemented
                 // this way in Spring and what most developers would expect to happen.
 
-                final Set<Class> interfaces = ClassUtils.getAllInterfacesAsSet(instance);
+                final Set<Class<?>> interfaces = ClassUtils.getAllInterfacesAsSet(instance);
 
                 while (c != Object.class) {
                     Arrays.stream(c.getDeclaredMethods())
@@ -607,7 +601,7 @@ public abstract class ExtensionFinder implements ExtensionPoint {
      * This allows to introspect metadata for a method which is both declared in parent class and in implemented
      * interface(s). {@code interfaces} typically is obtained by {@link ClassUtils#getAllInterfacesAsSet}
      */
-    Collection<Method> getMethodAndInterfaceDeclarations(Method method, Collection<Class> interfaces) {
+    Collection<Method> getMethodAndInterfaceDeclarations(Method method, Collection<Class<?>> interfaces) {
         final List<Method> methods = new ArrayList<>();
         methods.add(method);
 

@@ -737,6 +737,7 @@ public abstract class VirtualFile implements Comparable<VirtualFile>, Serializab
         private String determineRootPath() {
             return root == null ? null : root.getPath();
         }
+
         private boolean isIllegalSymlink() { // TODO JENKINS-26838
             try {
                 String myPath = f.getCanonicalPath();
