@@ -1,13 +1,13 @@
 language: java
 jdk:
   - openjdk8
-install: mvn install -DskipTests=true -Dlicense.disableCheck -Dmaven.javadoc.skip=true -B -V
+install: mvn install -Dmaven.test.skip=true -Dlicense.disableCheck -Dmaven.javadoc.skip=true -B -V
 cache:
   directories:
     - $HOME/.m2
 deploy:
   provider: bintray
-  skip_cleanup: true
+  cleanup: false
   file: bintrayconfig.json
   user: danielweber
   key:
