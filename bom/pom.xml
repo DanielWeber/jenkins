@@ -28,7 +28,7 @@ THE SOFTWARE.
   <parent>
     <groupId>org.jenkins-ci.main</groupId>
     <artifactId>jenkins-parent</artifactId>
-    <version>2.277.1-continental</version>
+    <version>2.277.2-continental</version>
   </parent>
 
   <artifactId>jenkins-bom</artifactId>
@@ -41,7 +41,7 @@ THE SOFTWARE.
   <properties>
     <guavaVersion>11.0.1</guavaVersion>
     <slf4jVersion>1.7.30</slf4jVersion>
-    <stapler.version>1.262</stapler.version>
+    <stapler.version>1.262.1</stapler.version>
     <groovy.version>2.4.12</groovy.version>
   </properties>
 
