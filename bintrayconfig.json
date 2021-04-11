@@ -16,10 +16,10 @@
         "attributes": []
     },
     "version": {
-        "name": "2.277.1",
-        "desc": "Jenkins LTS 2.277.1 + Performance patch(es)",
+        "name": "2.277.2",
+        "desc": "Jenkins LTS 2.277.2 + Performance patch(es)",
         "released": "2021-03-10",
-        "vcs_tag": "jenkins-2.277.1-continental",
+        "vcs_tag": "jenkins-2.277.2-continental",
         "attributes": [],
         "gpgSign": false
     },
@@ -27,7 +27,7 @@
         [
             {
                 "includePattern": "war/target/jenkins.war",
-                "uploadPattern": "2.277.1/war/jenkins.war",
+                "uploadPattern": "2.277.2/war/jenkins.war",
                 "matrixParams": { "override": 1 }
             }
         ],
